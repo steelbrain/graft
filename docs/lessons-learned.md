@@ -14,7 +14,7 @@ Graft's code applies the lesson, the lesson names the file.
 
 The framework Graft replaces gated each plugin by a minimum and maximum Darwin
 version, and the boot loader's configuration added kernel ranges of its own.
-The loader that bound ReimsGraphics before Graft also checked each parent
+The loader that bound a display driver before Graft also checked each parent
 class against a layout table taken from one release. Every new macOS release
 was refused until someone widened a range or added a table.
 
