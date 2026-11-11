@@ -62,13 +62,26 @@ struct Consumer {
 };
 Consumer *consumers;
 size_t consumerCount;
+// Orders report: the bind pass and the matching threads that deliver
+// gatePublished both publish a consumer's state, so a record and the state it
+// publishes change together, one report at a time. initializeBinding allocates it.
+IOLock *reportLock;
 
-void report(Consumer &consumer, const char *state, const char *reason) {
-    if (!strcmp(consumer.lastState, state) && !strcmp(consumer.lastReason, reason))
-        return;
-    strlcpy(consumer.lastState, state, sizeof(consumer.lastState));
-    strlcpy(consumer.lastReason, reason, sizeof(consumer.lastReason));
-    clientState(consumer.identifier, state, reason);
+// Publish a consumer's state as GraftClient.<identifier>, unless it is the state
+// already published. With unlessGateOpen, a report that comes once a nub has
+// opened the gate only goes to the log: a later failure to watch for another
+// personality's providers must not hide that the consumer is starting.
+void report(Consumer &consumer, const char *state, const char *reason,
+            bool unlessGateOpen = false) {
+    IOLockLock(reportLock);
+    if (unlessGateOpen && __atomic_load_n(&consumer.gateOpened, __ATOMIC_ACQUIRE)) {
+        note("%s: %s: %s", consumer.identifier, state, reason);
+    } else if (strcmp(consumer.lastState, state) || strcmp(consumer.lastReason, reason)) {
+        strlcpy(consumer.lastState, state, sizeof(consumer.lastState));
+        strlcpy(consumer.lastReason, reason, sizeof(consumer.lastReason));
+        clientState(consumer.identifier, state, reason);
+    }
+    IOLockUnlock(reportLock);
 }
 
 const OSMetaClass *metaClass(const char *name) {
@@ -1049,8 +1062,9 @@ OSDictionary *providerMatching(const manifest::View &view, char *reason, size_t 
 // notification, so each personality's handler sees each nub once. A nub that
 // another of the consumer's personalities already opened is left alone: its
 // re-registration matches every personality. The first nub reports the gate
-// open, naming the personality (refCon); later nubs only set the property. target
-// is the consumer's record.
+// open, naming the personality (refCon); later nubs only set the property. It
+// marks the gate open before it reports, so a watch failure that report orders
+// after it cannot replace the open state. target is the consumer's record.
 bool gatePublished(void *target, void *personality, IOService *nub, IONotifier *) {
     auto &consumer = *static_cast<Consumer *>(target);
     if (!nub || !consumer.gateKey[0] || nub->getProperty(consumer.gateKey) == kOSBooleanTrue)
@@ -1097,7 +1111,9 @@ void openGate(Consumer &consumer, const char *key, OSDictionary *matching) {
     report(consumer, "bound", reason);
     // addMatchingNotification retains each matching dictionary and delivers its
     // existing matches synchronously before it returns; no notifier is ever
-    // removed, so later-published nubs stay covered for the life of the kext.
+    // removed, so later-published nubs stay covered for the life of the kext. A
+    // personality it cannot watch is the consumer's state only while no nub has
+    // opened the gate; after that it goes to the log.
     matching->iterateObjects(&consumer, [](void *target, const OSSymbol *name, OSObject *object) {
         if (!IOService::addMatchingNotification(gIOFirstPublishNotification,
                                                 OSDynamicCast(OSDictionary, object), &gatePublished,
@@ -1106,7 +1122,7 @@ void openGate(Consumer &consumer, const char *key, OSDictionary *matching) {
             snprintf(reason, sizeof(reason),
                      "imports and vtables committed; cannot watch for a provider of personality %s",
                      name->getCStringNoCopy());
-            report(*static_cast<Consumer *>(target), "bound", reason);
+            report(*static_cast<Consumer *>(target), "bound", reason, true);
         }
         return false;
     });
@@ -1257,6 +1273,11 @@ void bindConsumers() {
 }
 
 bool initializeBinding(const RuntimeImage &image, const mach_header_64 *collection) {
+    reportLock = IOLockAlloc();
+    if (!reportLock) {
+        note("binding: cannot allocate the consumer state lock");
+        return false;
+    }
     kernel = &image;
     bootCollection = collection;
     findConsumers();

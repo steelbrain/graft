@@ -34,7 +34,7 @@ one of these:
 |---|---|
 | `kernel collection or calibrated symbols unavailable` | Graft could not find the running kernel's image or place its symbol table. When the log also says `binding: refuse kernel collection: load commands exceed the 64 KiB cap`, the Boot collection's load commands are larger than Graft reads. On arm64e, check that the firmware published `boot-kc-base` ([src/README.md](../../src/README.md#what-the-arm64-boot-firmware-provides)) |
 | `kernel write/routing facilities unavailable` | Graft could not prepare its kernel writes or its routes, such as when a kernel symbol they need is missing |
-| `catalogue binding routes unavailable` | Graft could not install the trigger it binds from; on x86-64 that is a route of the kernel's two catalogue entry points |
+| `catalogue binding routes unavailable` | Graft could not install the trigger it binds from; on x86-64 that is a route of the kernel's two catalogue entry points. When the log also says `binding: cannot allocate the consumer state lock`, Graft could not allocate the lock that orders each consumer's state |
 
 When the kernel log has `graft: refused: cannot allocate diagnostics` and the
 registry has no `GraftState`, Graft could not allocate its log and stopped
@@ -104,7 +104,7 @@ whether the gate is open:
 |---|---|
 | `imports and vtables committed; waiting for a provider of personality <names> to open the gate` | no nub that the provider matching of any personality in `<names>` matches is published yet. Graft opens the gate on every matching nub, whenever it appears |
 | `imports and vtables committed; activation gate open on a provider of personality <name>` | Graft set the gate property on a nub that personality `<name>`'s provider matching matches, and the kernel now constructs and starts the consumer |
-| `imports and vtables committed; cannot watch for a provider of personality <name>` | Graft could not register for the publication of personality `<name>`'s providers, so that personality's gate stays shut |
+| `imports and vtables committed; cannot watch for a provider of personality <name>` | Graft could not register for the publication of personality `<name>`'s providers, so that personality's gate stays shut. When another personality's provider has already opened the gate, the state keeps saying so, and this reason is in the log only |
 
 A consumer that stays at `waiting for a provider` has no nub in the guest that
 its personalities match: check the devices the virtual machine presents
