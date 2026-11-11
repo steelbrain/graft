@@ -30,9 +30,9 @@ void identity() {
     CHECK(!strcmp(child.tail, "6enableEv"));
 
     // const-ness (the `K` before the class) is part of the identity.
-    Identity constGet = synth::methodIdentity("__ZNK19IOMobileFramebuffer9getStateEv");
+    Identity constGet = synth::methodIdentity("__ZNK19IOMobileFramebuffer8getStateEv");
     CHECK(constGet.valid() && constGet.quals == 1);
-    CHECK(!strcmp(constGet.tail, "9getStateEv"));
+    CHECK(!strcmp(constGet.tail, "8getStateEv"));
 
     // A ref-qualifier is captured too, after the cv-qualifiers.
     Identity refGet = synth::methodIdentity("__ZNO3Foo3barEv");
@@ -61,9 +61,9 @@ void composing() {
     CHECK(!strcmp(out, "__ZN19IOMobileFramebuffer6enableEv"));
 
     // const-ness is re-emitted (the `K` before the class).
-    Identity getState = synth::methodIdentity("__ZNK16SynthFramebuffer9getStateEv");
+    Identity getState = synth::methodIdentity("__ZNK16SynthFramebuffer8getStateEv");
     CHECK(synth::composeMemberSymbol(getState, "IOMobileFramebuffer", out, sizeof(out)) > 0);
-    CHECK(!strcmp(out, "__ZNK19IOMobileFramebuffer9getStateEv"));
+    CHECK(!strcmp(out, "__ZNK19IOMobileFramebuffer8getStateEv"));
 
     // A pure slot sources its symbol from the concrete sibling, not the parent:
     // compose under the sibling class.
