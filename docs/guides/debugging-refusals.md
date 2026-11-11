@@ -64,6 +64,9 @@ A refusal is final for the boot. The reasons, in the order Graft checks:
 | `invalid consumer manifest` | the manifest in `__DATA,__graft` broke a rule of [manifest.md](../manifest.md#validation). Graft does not say which rule. Rebuild the consumer with the SDK of the Graft release you boot |
 | `consumer started before binding` | the consumer was already running, so it was not injected dormant. Build it through `consumer.mk` |
 | `write-plan size overflow` | the manifest declares more writes than Graft can count. Rebuild the consumer with the SDK of the Graft release you boot |
+| `provider matching does not parse: <error>` | the manifest's provider matching is not an XML property list `OSUnserializeXML` reads; `<error>` is its message. Rebuild the consumer with the SDK of the Graft release you boot |
+| `provider matching is not a dictionary of personalities`, `provider matching names no personality` | the provider matching parsed, but is not a dictionary with an entry per personality ([manifest.md](../manifest.md#provider-matching)). Rebuild the consumer with the current SDK |
+| `personality <name>: provider matching names no IOProviderClass` | the matching for personality `<name>` is not a dictionary with an `IOProviderClass` string, so Graft could not watch for its provider. Rebuild the consumer with the current SDK, which refuses such a personality |
 | `<library>: no registered collection entry` (x86-64) or `<library>: not a collection entry` (arm64e) | the provider is not in any kernel collection Graft reads |
 | `<library>: cannot verify <class>'s class anchor (<why>)` | Graft could not confirm the provider's image from the class's live metaclass. `class not registered` means the provider's classes are not registered; for a provider the consumer only imports from, declare an `anchor`. `image load commands exceed the 64 KiB cap` means the provider's load commands are larger than Graft reads |
 | `<class>: missing or unbounded vtable` | the parent class is not registered, or its vtable symbol is missing from its provider or holds no method |
@@ -89,13 +92,13 @@ whether the gate is open:
 
 | bound reason | meaning |
 |---|---|
-| `imports and vtables committed; waiting for device <match> to open the gate` | no PCI nub with `IOPCIPrimaryMatch` `<match>` is published yet. Graft opens the gate on every matching nub, whenever it appears |
-| `imports and vtables committed; activation gate open on the device nub` | Graft set the gate property on a matching nub, and the kernel now constructs and starts the consumer |
-| `imports and vtables committed; cannot build the device match` | Graft could not build the matching dictionary for the device, so the gate stays shut |
-| `imports and vtables committed; cannot watch for the device nub` | Graft could not register for the device's publication, so the gate stays shut |
+| `imports and vtables committed; waiting for a provider of personality <names> to open the gate` | no nub that the provider matching of any personality in `<names>` matches is published yet. Graft opens the gate on every matching nub, whenever it appears |
+| `imports and vtables committed; activation gate open on a provider of personality <name>` | Graft set the gate property on a nub that personality `<name>`'s provider matching matches, and the kernel now constructs and starts the consumer |
+| `imports and vtables committed; cannot watch for a provider of personality <name>` | Graft could not register for the publication of personality `<name>`'s providers, so that personality's gate stays shut |
 
-A consumer that stays at `waiting for device` has no device in the guest that
-its personalities match: check the PCI device the virtual machine presents.
+A consumer that stays at `waiting for a provider` has no nub in the guest that
+its personalities match: check the devices the virtual machine presents
+against the personalities' matching keys, such as `IOPCIPrimaryMatch`.
 
 ## A synthesized class (arm64e)
 

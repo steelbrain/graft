@@ -76,8 +76,8 @@ After that:
 
 ### The manifest and the binding plan
 
-- [Manifest.h](Manifest.h): the manifest format, version 2 for x86-64 and
-  version 3 for arm64e, and its validator, which it takes from the SDK's
+- [Manifest.h](Manifest.h): the manifest format, version 4 for x86-64 and
+  version 5 for arm64e, and its validator, which it takes from the SDK's
   [ManifestFormat.h](../sdk/include/graft/ManifestFormat.h), shared with the
   SDK's build tool; and each provider's anchor class
   ([docs/manifest.md](../docs/manifest.md)).
@@ -108,10 +108,11 @@ After that:
   the binding, architecture-neutral
   ([docs/design.md](../docs/design.md#binding-a-consumer)). `attemptBind` runs
   named stages: open the manifest, verify the providers and class layouts,
-  plan the import and vtable writes, build any synthesized vtable, check each
-  write's target and commit the writes, and open the consumer's activation
-  gate on every device nub that matches, present or published later. A
-  refusal at any stage leaves the consumer unbound.
+  parse its provider matching, plan the import and vtable writes, build any
+  synthesized vtable, check each write's target and commit the writes, and
+  open the consumer's activation gate on every nub a personality's provider
+  matching matches, present or published later. A refusal at any stage leaves
+  the consumer unbound.
 - [BindingPlacement.h](BindingPlacement.h): how the binding finds the images it
   works on: install the trigger, locate a provider by bundle identifier, find
   a placed kext such as the consumer, and ask whether a kext has started. It also says where in the
@@ -199,10 +200,10 @@ directory:
   [Fixup.h](Fixup.h), with the shared arithmetic in
   [FixupShared.h](FixupShared.h)).
 
-The manifest carries both site forms ([Manifest.h](Manifest.h)): a version-2
-x86-64 pointer or `0xe8`/`0xe9` branch, and a version-3 arm64e pointer whose
+The manifest carries both site forms ([Manifest.h](Manifest.h)): a version-4
+x86-64 pointer or `0xe8`/`0xe9` branch, and a version-5 arm64e pointer whose
 two trailing bytes hold its signing context. The SDK's `graft-kext` writes the
-right one from the consumer's relocations or chained fixups. Version 3 also
+right one from the consumer's relocations or chained fixups. Version 5 also
 carries the segment, fill and synthesized-class tables, which only arm64e
 uses.
 

@@ -22,15 +22,14 @@ IORegistry, and the guest keeps booting.
 
 Graft serves two kexts, named in [src/Policy.h](src/Policy.h): the bound
 consumer `ai.aneesiqbal.ReimsGraphics` and the owned client
-`ai.aneesiqbal.RgfxGate`. The SDK also requires the consumer's personalities
-to match the PCI device `1234:5247`. These are the guest drivers of
+`ai.aneesiqbal.RgfxGate`. These are the guest drivers of
 reims-vgpu, a paravirtual GPU for macOS virtual machines: ReimsGraphics is its
 display and Metal driver, and RgfxGate installs its Metal bundle. Graft
 replaces Lilu for them.
 
 Graft has no plugin interface. Serving another kext means changing
-`src/Policy.h` and rebuilding Graft, and serving another device also means
-changing the device match in the SDK's build tool. The
+`src/Policy.h` and rebuilding Graft. A consumer's personalities may match any
+provider: Graft opens the gate on the nubs they match. The
 [examples](examples/README.md) carry the two pinned identities for that
 reason.
 

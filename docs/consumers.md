@@ -13,9 +13,9 @@ what Graft does with each kext at boot.
 
 Graft serves one kext of each kind, named in `src/Policy.h`. It serves calls
 that pass the owned client's identifier, `ai.aneesiqbal.RgfxGate`, and binds
-the consumer `ai.aneesiqbal.ReimsGraphics`, whose personalities must match the
-PCI device `1234:5247`. Serving another kext means changing `src/Policy.h` and
-rebuilding Graft.
+the consumer `ai.aneesiqbal.ReimsGraphics`, whose personalities may match any
+provider. Serving another kext means changing `src/Policy.h` and rebuilding
+Graft.
 
 Everything a kext builds with is in [sdk/](../sdk/README.md). Another
 repository takes a release, the SDK included, with `tools/vendor.py`

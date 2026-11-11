@@ -202,9 +202,11 @@ refuses. On arm64e, it tries once, at start. Each attempt runs these steps:
 
 1. **Find the consumer.** No injected consumer means waiting. A consumer that
    is already running is refused, since Graft binds only a dormant one.
-2. **Read the manifest** and validate every table in it. The consumer's
-   personalities stay in its Info.plist, checked to name the consumer and the
-   PCI device at build time, not here.
+2. **Read the manifest** and validate every table in it. Then parse its
+   provider matching with `OSUnserializeXML`: one dictionary per personality,
+   which must name an `IOProviderClass`, that matches the personality's
+   provider ([manifest.md](manifest.md#provider-matching)). The consumer's
+   personalities stay in its Info.plist, gated at build time.
 3. **Open the providers.** On x86-64, each library the consumer imports from
    must be registered with the kernel; until then Graft waits. Graft then asks
    the kernel to load it (`OSKextLoadKextWithIdentifier`), and waits until it
@@ -234,12 +236,13 @@ refuses. On arm64e, it tries once, at start. Each attempt runs these steps:
    section, and, on arm64e, in a writable segment. Every site and slot is then
    written and read back together. If anything fails, Graft restores what it
    wrote.
-9. **Open the activation gate.** Graft watches for the consumer's device by
-   the manifest's `IOPCIPrimaryMatch`, with an `IOFirstPublish` matching
-   notification. On every matching nub, present now or published later, it
-   sets the gate property and re-registers the nub (`setProperty`,
-   `registerService`). The personalities' passive `IOPropertyMatch` then
-   matches, and the kernel constructs and starts the consumer. These calls
+9. **Open the activation gate.** Graft watches for each personality's
+   providers by its provider matching, with one `IOFirstPublish` matching
+   notification per personality. On every matching nub, present now or
+   published later, it sets the gate property and re-registers the nub
+   (`setProperty`, `registerService`), unless another of the consumer's
+   personalities already did. The personalities' passive `IOPropertyMatch`
+   then matches, and the kernel constructs and starts the consumer. These calls
    exist on every release, unlike the catalogue personality injection macOS 27
    removed. A passive property holds the consumer unconstructed until the
    bind, which an `IOResourceMatch` could not: IOKit consults that only before
@@ -247,8 +250,9 @@ refuses. On arm64e, it tries once, at start. Each attempt runs these steps:
 
 Steps 1 to 7 write nothing to the consumer or the kernel, though step 3 may
 load the consumer's libraries. A refusal at any of them leaves the consumer
-dormant and names the reason: the missing symbol, the provider that is not
-there, or the class whose layout differs. A manifest that fails validation is
+dormant and names the reason: the provider matching that is unusable, the
+missing symbol, the provider that is not there, or the class whose layout
+differs. A manifest that fails validation is
 reported only as `invalid consumer manifest`, without the rule it broke.
 Graft never binds part of a consumer, and it never panics the guest over one.
 
@@ -315,8 +319,8 @@ state on the IORegistry root, where `ioreg -l` shows it:
 | `GraftClient.<bundle id>` | one per served kext, as the string `<state>: <reason>` |
 
 A bound consumer's state is `waiting`, `bound` or `refused`. A bound
-consumer's reason also says whether the gate is open yet or still waiting for
-the device. The owned client's state is `routed` or `refused` after routing,
+consumer's reason also says whether the gate is open yet, naming the
+personality whose provider opened it, or still waiting for a provider. The owned client's state is `routed` or `refused` after routing,
 `refused` after a failed symbol lookup, or whatever it last set with
 `graft_client_state`. [guides/debugging-refusals.md](guides/debugging-refusals.md)
 lists every reason.

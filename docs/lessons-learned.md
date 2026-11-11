@@ -152,9 +152,9 @@ and run its constructors, which called through import slots Graft had not yet
 bound.
 
 Hold the consumer back at a stage before it is constructed. A bound
-consumer's personalities carry a passive `IOPropertyMatch` on the device nub,
+consumer's personalities carry a passive `IOPropertyMatch` on the provider nub,
 which IOKit evaluates before it allocates anything. After the bind, Graft
-sets the property on each nub that matches the device and re-registers it, so
+sets the property on each nub a personality matches and re-registers it, so
 matching runs only once the imports and vtables are in place. It watches for
 the nubs with a matching notification rather than looking them up once, so a
 nub published after the bind opens the gate too (`src/KernelBinding.cpp`,

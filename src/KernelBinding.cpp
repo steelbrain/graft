@@ -24,6 +24,7 @@
 #include <libkern/c++/OSDictionary.h>
 #include <libkern/c++/OSString.h>
 #include <libkern/c++/OSSymbol.h>
+#include <libkern/c++/OSUnserialize.h>
 #include <mach/vm_prot.h>
 
 namespace graft {
@@ -837,8 +838,7 @@ bool planSynthesizedVtables(const manifest::View &view, const RuntimeImage &cons
 // preserveBindings stays set when the writes committed or an unverified
 // rollback may have left some in place, so the caller keeps provider holds.
 // manifestStart/manifestSize are the consumer's own __graft section, which Graft
-// reads back after the commit (the gate and device strings), so no write may
-// land in it.
+// reads back after the commit (the gate key), so no write may land in it.
 bool commitWrites(const manifest::View &view, const RuntimeImage &consumer, uint64_t base,
                   const binding::Write *writes, Patch *patches, size_t count,
                   uint64_t manifestStart, uint64_t manifestSize, bool &preserveBindings,
@@ -903,72 +903,130 @@ void noteAbsentWeakImports(const manifest::View &view, const RuntimeImage &consu
     }
 }
 
+// The consumer's provider matching (docs/manifest.md): the manifest's XML
+// dictionary from each personality's name to the matching dictionary of its
+// provider. Parsed before anything is written, so a consumer whose gate could
+// never open is refused while it is still untouched. Null, with reason set, when
+// it does not parse, names no personality, or holds a personality that is not a
+// dictionary naming an IOProviderClass.
+OSDictionary *providerMatching(const manifest::View &view, char *reason, size_t reasonSize) {
+    OSString *error = nullptr;
+    OSObject *parsed = OSUnserializeXML(view.string(view.header().matching), &error);
+    auto matching = OSDynamicCast(OSDictionary, parsed);
+    if (!matching || !matching->getCount()) {
+        if (!parsed)
+            snprintf(reason, reasonSize, "provider matching does not parse%s%s", error ? ": " : "",
+                     error ? error->getCStringNoCopy() : "");
+        else
+            snprintf(reason, reasonSize, "provider matching %s",
+                     matching ? "names no personality" : "is not a dictionary of personalities");
+        OSSafeReleaseNULL(parsed);
+        OSSafeReleaseNULL(error);
+        return nullptr;
+    }
+    OSSafeReleaseNULL(error);
+    struct Check {
+        char *reason;
+        size_t reasonSize;
+        bool invalid;
+    } check{reason, reasonSize, false};
+    matching->iterateObjects(&check, [](void *context, const OSSymbol *name, OSObject *object) {
+        auto personality = OSDynamicCast(OSDictionary, object);
+        if (personality && OSDynamicCast(OSString, personality->getObject("IOProviderClass")))
+            return false;
+        auto check = static_cast<Check *>(context);
+        snprintf(check->reason, check->reasonSize,
+                 "personality %s: provider matching names no IOProviderClass",
+                 name->getCStringNoCopy());
+        return check->invalid = true;
+    });
+    if (check.invalid)
+        OSSafeReleaseNULL(matching);
+    return matching;
+}
+
 // The activation gate: the consumer's gate property is a passive match term on
 // its personalities, evaluated before the consumer class is ever constructed, so
 // unlike an IOResourceMatch (which gates only start(), after the base
 // constructors have already run through the bound slots) it holds the consumer
-// dormant until Graft sets the property on the device nub and re-registers it.
-// The gate key and device match, copied here so the published-nub handler can run
+// dormant until Graft sets the property on its provider nub and re-registers it.
+// The gate key, copied here, and the provider matching, kept for the life of the
+// kext (its keys name the personalities), let the published-nub handler run
 // after the bind pass returns.
 char gateKey[manifest::MaxGateLength + 1];
-char gateDevice[64];
+OSDictionary *gateMatching;
 uint32_t gateOpened;
-IONotifier *gateNotifier;
 
-// A matching IOPCIDevice nub: set the gate property on it and re-register it, so
-// its deferred match now starts the consumer with its slots and vtable bound.
-// addMatchingNotification delivers every current match this way and every future
-// one, so a nub published after the bind opens the gate too. registerService does
-// asynchronous matching (it posts a job rather than matching inline), so calling
-// it from within notification delivery re-enters no matching lock; setProperty
-// takes only the nub's own property lock. Re-registering an already-published nub
-// does not re-fire the first-publish notification, so the handler sees each nub
-// once. The first nub reports the gate open; later nubs only set the property.
-bool gatePublished(void *, void *, IOService *nub, IONotifier *) {
-    if (!nub || !gateKey[0])
+// A nub that a personality's provider matching matches: set the gate property on
+// it and re-register it, so its deferred match now starts the consumer with its
+// slots and vtable bound. addMatchingNotification delivers every current match
+// this way and every future one, so a nub published after the bind opens the gate
+// too. registerService does asynchronous matching (it posts a job rather than
+// matching inline), so calling it from within notification delivery re-enters no
+// matching lock; setProperty takes only the nub's own property lock.
+// Re-registering an already-published nub does not re-fire the first-publish
+// notification, so each personality's handler sees each nub once. A nub that
+// another of the consumer's personalities already opened is left alone: its
+// re-registration matches every personality. The first nub reports the gate
+// open, naming the personality (refCon); later nubs only set the property.
+bool gatePublished(void *, void *personality, IOService *nub, IONotifier *) {
+    if (!nub || !gateKey[0] || nub->getProperty(gateKey) == kOSBooleanTrue)
         return true;
     nub->setProperty(gateKey, kOSBooleanTrue);
     nub->registerService();
-    if (!__atomic_exchange_n(&gateOpened, 1u, __ATOMIC_ACQ_REL))
-        report("bound", "imports and vtables committed; activation gate open on the device nub");
+    if (!__atomic_exchange_n(&gateOpened, 1u, __ATOMIC_ACQ_REL)) {
+        char reason[320];
+        snprintf(reason, sizeof(reason),
+                 "imports and vtables committed; activation gate open on a provider of "
+                 "personality %s",
+                 static_cast<const OSSymbol *>(personality)->getCStringNoCopy());
+        report("bound", reason);
+    }
     return true;
 }
 
-// Open the activation gate: watch for the consumer's device nub by the manifest's
-// IOPCIPrimaryMatch and open the gate on every match, now or later. It reports the
-// bound state: gate open if a nub is already present, else waiting for the device,
-// so the state always begins with "bound". serviceMatching, addMatchingNotification,
-// setProperty and registerService are exported on every release, macOS 27 included,
-// so one binary activates across the range.
-void openGate(const char *key, const char *device) {
-    strlcpy(gateKey, key ? key : "", sizeof(gateKey));
-    strlcpy(gateDevice, device ? device : "(none)", sizeof(gateDevice));
-    auto matching = IOService::serviceMatching("IOPCIDevice");
-    if (matching && device) {
-        auto value = OSString::withCString(device);
-        if (value) {
-            matching->setObject("IOPCIPrimaryMatch", value);
-            value->release();
-        }
-    }
-    if (!matching) {
-        report("bound", "imports and vtables committed; cannot build the device match");
-        return;
-    }
+// Open the activation gate: watch, for each personality, for the nubs its
+// provider matching matches, and open the gate on every one, now or later. It
+// reports the bound state: gate open if a provider is already present, else
+// waiting for one, so the state always begins with "bound". addMatchingNotification,
+// setProperty and registerService are exported on every release, macOS 27
+// included, so one binary activates across the range.
+void openGate(const char *key, OSDictionary *matching) {
+    strlcpy(gateKey, key, sizeof(gateKey));
+    gateMatching = matching;
     // Report waiting first: the handler reports the gate open, so whichever nub
     // opens it, now or on a later matching thread, writes the last state.
+    struct Names {
+        char text[160];
+    } names{};
+    matching->iterateObjects(&names, [](void *context, const OSSymbol *name, OSObject *) {
+        auto names = static_cast<Names *>(context);
+        if (names->text[0])
+            strlcat(names->text, ", ", sizeof(names->text));
+        strlcat(names->text, name->getCStringNoCopy(), sizeof(names->text));
+        return false;
+    });
     char reason[320];
     snprintf(reason, sizeof(reason),
-             "imports and vtables committed; waiting for device %s to open the gate", gateDevice);
+             "imports and vtables committed; waiting for a provider of personality %s to open "
+             "the gate",
+             names.text);
     report("bound", reason);
-    // addMatchingNotification retains the matching dictionary and delivers existing
-    // matches synchronously before it returns; it is never removed, so later-
-    // published nubs stay covered for the life of the kext.
-    gateNotifier = IOService::addMatchingNotification(gIOFirstPublishNotification, matching,
-                                                      &gatePublished, nullptr, nullptr);
-    matching->release();
-    if (!gateNotifier)
-        report("bound", "imports and vtables committed; cannot watch for the device nub");
+    // addMatchingNotification retains each matching dictionary and delivers its
+    // existing matches synchronously before it returns; no notifier is ever
+    // removed, so later-published nubs stay covered for the life of the kext.
+    matching->iterateObjects(nullptr, [](void *, const OSSymbol *name, OSObject *object) {
+        if (!IOService::addMatchingNotification(gIOFirstPublishNotification,
+                                                OSDynamicCast(OSDictionary, object), &gatePublished,
+                                                nullptr, const_cast<OSSymbol *>(name))) {
+            char reason[320];
+            snprintf(reason, sizeof(reason),
+                     "imports and vtables committed; cannot watch for a provider of personality %s",
+                     name->getCStringNoCopy());
+            report("bound", reason);
+        }
+        return false;
+    });
 }
 
 // Bind the dormant consumer: open its manifest, verify its providers and
@@ -1002,6 +1060,13 @@ void attemptBind() {
         finished = true;
         return;
     }
+    char reason[320];
+    OSDictionary *matching = providerMatching(view, reason, sizeof(reason));
+    if (!matching) {
+        report("refused", reason);
+        finished = true;
+        return;
+    }
     auto states = allocateArray<LibraryState>(h.libraries.count);
     auto providers = allocateArray<Provider>(h.libraries.count);
     auto classes = allocateArray<ActualClass>(h.classes.count);
@@ -1015,7 +1080,7 @@ void attemptBind() {
     // than refusing the consumer for the whole boot. The later pipeline steps set
     // waiting themselves where a miss may still resolve.
     bool waiting = !complete;
-    char reason[320] = "cannot allocate binding resources";
+    strlcpy(reason, "cannot allocate binding resources", sizeof(reason));
     size_t vtableWrites = 0;
     size_t synthWrites = 0;
     bool preserveBindings = false;
@@ -1050,14 +1115,16 @@ void attemptBind() {
                                 preserveBindings, reason, sizeof(reason));
     if (complete) {
         noteAbsentWeakImports(view, consumer, base, providers, unresolved);
-        // Open the activation gate: watch for the consumer's device nub and set
+        // Open the activation gate: watch for the consumer's provider nubs and set
         // its gate property so the personalities' passive IOPropertyMatch, which
         // deferred the consumer's very construction, now matches and the kernel
-        // starts it with its slots and vtable bound. openGate reports the bound
-        // state (gate open, or waiting for the device).
-        openGate(view.string(h.gate), view.string(h.device));
+        // starts it with its slots and vtable bound. openGate keeps the matching
+        // and reports the bound state (gate open, or waiting for a provider).
+        openGate(view.string(h.gate), matching);
+        matching = nullptr;
         finished = true;
     }
+    OSSafeReleaseNULL(matching);
     // Opening the gate can expose the consumer to a concurrent match. Never undo
     // valid addresses after that boundary or release providers used by a
     // possibly running client. An unverified write rollback likewise requires

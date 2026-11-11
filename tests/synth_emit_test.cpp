@@ -118,7 +118,7 @@ void overridesResolveByMethodName(const Census &found) {
 }
 
 void packPartitionsTheRecords(const Built &built, const Census &found) {
-    Bytes bytes = packManifest(built.declaration, built.layouts, found, built.gate, {},
+    Bytes bytes = packManifest(built.declaration, built.layouts, found, built.activation, {},
                                manifest::VersionArm64e);
     manifest::View view = manifestOf(bytes);
     const manifest::Header &header = view.header();
@@ -176,7 +176,7 @@ void sharedParentIsRefused(const Built &built, const Census &found) {
     shared.vtables.push_back({found.synth[0].vtableOffset + 16, 0, parentSlots, {}, {}});
     CHECK(refuses(
             [&] {
-                packManifest(built.declaration, built.layouts, shared, built.gate, {},
+                packManifest(built.declaration, built.layouts, shared, built.activation, {},
                              manifest::VersionArm64e);
             },
             "Graft would refuse this manifest: invalid vtables record 0"));

@@ -64,7 +64,8 @@ struct Fixture {
             return offset;
         };
         h.gate = string(gate);
-        h.device = string("0x52471234");
+        h.matching = string("<dict><key>Fixture</key><dict><key>IOProviderClass</key>"
+                            "<string>IOResources</string></dict></dict>");
         library = string("ai.aneesiqbal.graft.test.Fixture.library");
         method = string("_method");
         renamed = string("_renamed");
@@ -105,10 +106,14 @@ static void validation() {
     for (size_t length = 0; length < f.bytes.size(); ++length) {
         CHECK(manifest::open(f.bytes.data(), length, v).error != Error::None && !v.valid());
     }
-    f.h.version = VersionArm64e + 1;
-    f.save();
-    CHECK(f.open(v).error == Error::Version);
-    // A version-3 (arm64e) manifest: the base site is a valid plain pointer,
+    // Only the current versions are read: the earlier ones, which named a device
+    // rather than carrying provider matching, and any later one are refused.
+    for (uint32_t version : {2u, 3u, VersionArm64e + 1}) {
+        f.h.version = version;
+        f.save();
+        CHECK(f.open(v).error == Error::Version);
+    }
+    // A version-5 (arm64e) manifest: the base site is a valid plain pointer,
     // and an authenticated site carries key, addrDiv and diversity.
     f.h.version = VersionArm64e;
     f.save();
@@ -126,6 +131,11 @@ static void validation() {
     CHECK(Fixture(gate.c_str()).open(v).error == Error::None);
     gate += 'g';
     CHECK(Fixture(gate.c_str()).open(v).error == Error::String);
+    // The provider matching is a string the table holds.
+    f = Fixture{};
+    f.h.matching = 0;
+    f.save();
+    CHECK(f.open(v).error == Error::String);
     f = Fixture{};
     f.h.candidates.offset = f.h.imports.offset;
     f.save();
@@ -503,7 +513,7 @@ static void vtables() {
     puts("vtables: pass (live inherited slots, preserved overrides/appended methods, refusal)");
 }
 
-// A version-3 (arm64e) manifest's segment table and vtable fills: the segments
+// A version-5 (arm64e) manifest's segment table and vtable fills: the segments
 // are sorted, bounded, disjoint and named; the fills partition [0, parentSlots)
 // with the overrides, in slot order, each a valid signing context. x86-64
 // carries neither. The real staged forms are cross-checked at build time; this
@@ -557,7 +567,7 @@ static void segmentsAndFills() {
     puts("segments and fills: pass (sorted/bounded segments, fill partition, version gate)");
 }
 
-// A version-3 (arm64e) manifest's synthesis tables: selector strings, overrides
+// A version-5 (arm64e) manifest's synthesis tables: selector strings, overrides
 // that partition the selectors in order with a valid signing context, and classes
 // that partition the overrides. x86-64 carries none. The real staged form is
 // cross-checked at build time; this exercises the refusals open() must make on a
@@ -693,6 +703,7 @@ static void linkedImage(const char *path) {
     View view;
     CHECK(manifest::open(image.data() + section->offset, section->size, view).error == Error::None);
     CHECK(!strcmp(view.string(view.header().gate), "graft-bound"));
+    CHECK(!strcmp(view.string(view.header().matching), "<dict/>"));
     puts("kernel fixture: pass (x86-64 kext link, embedded manifest section)");
 }
 

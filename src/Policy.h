@@ -13,9 +13,9 @@ namespace policy {
 
 // The consumer Graft binds by name once its manifest passes every check:
 // ReimsGraphics, injected with its personalities gated by an IOPropertyMatch
-// until Graft binds it and sets the gate property on the device nub. The SDK
-// stages the gate, checks the personalities name our device, and records it in
-// the manifest, so Graft finds the nub with no device constant of its own.
+// until Graft binds it and sets the gate property on a provider nub. The SDK
+// stages the gate and records each personality's provider matching in the
+// manifest, so Graft finds the nubs with no device constant of its own.
 constexpr const char *ConsumerIdentifier = "ai.aneesiqbal.ReimsGraphics";
 
 // The owned client Graft serves directly: RgfxGate, which installs the Metal
