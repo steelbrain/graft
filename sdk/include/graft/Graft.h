@@ -59,7 +59,9 @@ bool graft_kernel_symbol(const char *identifier, const char *symbol, uint64_t *a
 // storage resident even on failure: an unverified rollback can retain a route.
 bool graft_route_kernel(const char *identifier, const graft_route_request *requests, size_t count);
 
-// Adds a line to Graft's log, prefixed with identifier.
+// Adds a line to Graft's log, prefixed with identifier. This and
+// graft_client_state work whether or not Graft is active, so a client can record
+// that Graft refused.
 void graft_client_log(const char *identifier, const char *format, ...)
         __attribute__((format(printf, 2, 3)));
 

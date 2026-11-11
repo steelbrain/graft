@@ -3,7 +3,8 @@
 // graft_start initializes diagnostics, the kernel image, the write and route
 // facilities and the catalogue binding from the kmod load, before the Graft
 // service starts. A call's identifier is accepted when it names a placed kext
-// (placedBase); the functions that act on the kernel additionally require Graft
+// (placedBase), whether or not Graft is active, so a client can record that
+// Graft refused; the functions that act on the kernel additionally require Graft
 // active. Graft is not pinned to any one client's name. The
 // architecture-neutral core does the work.
 #include "BindingPlacement.h"
@@ -34,7 +35,9 @@ bool ready;
 // on x86-64 a fileset entry in the Boot collection, on arm64e a device-tree node
 // the firmware wrote (graft::placedBase). Graft is not pinned to any one name,
 // and a placed identifier is what makes every GraftClient.<id> registry key name
-// a real kext.
+// a real kext. graft_start keeps the Boot collection before anything can refuse,
+// so this holds when Graft is not active too; on x86-64 it needs the collection's
+// load commands to validate, while arm64e reads the device tree instead.
 bool placedClient(const char *identifier) {
     auto collection = __atomic_load_n(&bootCollection, __ATOMIC_ACQUIRE);
     return identifier && graft::placedBase(collection, identifier) != 0;
@@ -91,13 +94,15 @@ extern "C" kern_return_t graft_start(kmod_info_t *, void *) {
     }
     graft::setState("starting", "own kmod entry");
     const mach_header_64 *collection = nullptr;
-    if (!graft::openKernel(kernel, collection)) {
+    bool opened = graft::openKernel(kernel, collection);
+    // Keep the Boot collection for placedClient, even if Graft refuses below: it
+    // tells a placed kext's identifier from any other, so every served call names
+    // real placed code, and a client can still publish that Graft is not active.
+    __atomic_store_n(&bootCollection, collection, __ATOMIC_RELEASE);
+    if (!opened) {
         graft::setState("refused", "kernel collection or calibrated symbols unavailable");
         return KERN_SUCCESS;
     }
-    // Keep the Boot collection for placedClient: it tells a placed kext's
-    // identifier from any other, so every served call names real placed code.
-    __atomic_store_n(&bootCollection, collection, __ATOMIC_RELEASE);
     if (!graft::initializeWrites(kernel) || !graft::initializeRoutes(kernel)) {
         graft::setState("refused", "kernel write/routing facilities unavailable");
         return KERN_SUCCESS;

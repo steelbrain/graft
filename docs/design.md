@@ -103,7 +103,9 @@ which kext makes the call.
 - `graft_client_log` adds a line to Graft's log, and `graft_client_state` sets
   the client's state and reason in the registry. These two also require the
   identifier to name a placed kext, so neither can publish state under a name no
-  kext owns.
+  kext owns. They do not require Graft active, so a client can record that
+  Graft refused at start. On x86-64 they need only the Boot collection's load
+  commands to be valid, and on arm64e only the device tree.
 
 ### Routing
 

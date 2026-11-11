@@ -201,15 +201,17 @@ uint64_t RuntimeImage::symbolExtent(uint64_t address) const {
 }
 
 bool openKernel(RuntimeImage &kernel, const mach_header_64 *&collection) {
-    collection = bootCollectionHeader();
-    if (!collection)
+    collection = nullptr;
+    auto header = bootCollectionHeader();
+    if (!header)
         return false;
-    if (collection->sizeofcmds > macho::MaxLoadCommands) {
+    if (header->sizeofcmds > macho::MaxLoadCommands) {
         note("binding: refuse kernel collection: load commands exceed the 64 KiB cap");
         return false;
     }
-    if (!macho::commandsValid(collection))
+    if (!macho::commandsValid(header))
         return false;
+    collection = header;
     uint64_t address = macho::filesetEntry(collection, "com.apple.kernel");
     auto mh = address ? macho::header(reinterpret_cast<const void *>(address)) : collection;
     return kernel.open(mh, "_IOLog", ioLogAddress());
