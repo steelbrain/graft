@@ -68,7 +68,7 @@ TOOL_LIBRARY = $(filter-out $(BUILD)/tool/cli.o,$(TOOL_OBJECTS))
 TOOL_HEADERS = $(wildcard sdk/tool/*.h) sdk/include/graft/ManifestFormat.h
 TOOL_FIXTURES = $(BUILD)/consumer/x86_64/Fixture.kext/Contents/MacOS/Fixture \
 	$(BUILD)/consumer/arm64e/Fixture.kext/Contents/MacOS/Fixture \
-	$(BUILD)/synthesized/ReimsDisplay.kext/Contents/MacOS/ReimsDisplay
+	$(BUILD)/synthesized/SynthDisplay.kext/Contents/MacOS/SynthDisplay
 
 .PHONY: all test kernel-check kernel-check-arm64e graft-arm64e core-probe route-probe examples lint format clean release
 all: $(BINARY)
@@ -292,14 +292,14 @@ $(BUILD)/consumer/%/Fixture.kext/Contents/MacOS/Fixture: $(BUILD)/consumer/%/Fix
 		--work=$(BUILD)/consumer/$*/graft --output=$(BUILD)/consumer/$*/Fixture.kext \
 		$< -- -arch $* -Itests/consumer
 
-$(BUILD)/synthesized/ReimsDisplay.o: tests/synthesized/ReimsDisplay.cpp tests/synthesized/ReimsDisplay.h sdk/include/graft/IOMobileFramebufferLegacy.h Makefile
+$(BUILD)/synthesized/SynthDisplay.o: tests/synthesized/SynthDisplay.cpp tests/synthesized/SynthDisplay.h sdk/include/graft/IOMobileFramebufferLegacy.h Makefile
 	@mkdir -p $(@D)
 	xcrun --sdk macosx clang++ $(ARMFLAGS) -Itests/synthesized -c $< -o $@
 
-$(BUILD)/synthesized/ReimsDisplay.kext/Contents/MacOS/ReimsDisplay: $(BUILD)/synthesized/ReimsDisplay.o tests/synthesized/graft.json tests/synthesized/Info.plist $(BUILD)/graft-kext
-	$(BUILD)/graft-kext build --name=ReimsDisplay --version=1.0.0 --arch='-arch arm64e' \
+$(BUILD)/synthesized/SynthDisplay.kext/Contents/MacOS/SynthDisplay: $(BUILD)/synthesized/SynthDisplay.o tests/synthesized/graft.json tests/synthesized/Info.plist $(BUILD)/graft-kext
+	$(BUILD)/graft-kext build --name=SynthDisplay --version=1.0.0 --arch='-arch arm64e' \
 		--declaration=tests/synthesized/graft.json --info-plist=tests/synthesized/Info.plist \
-		--work=$(BUILD)/synthesized/graft --output=$(BUILD)/synthesized/ReimsDisplay.kext \
+		--work=$(BUILD)/synthesized/graft --output=$(BUILD)/synthesized/SynthDisplay.kext \
 		$< -- -arch arm64e -Isdk/include -Itests/synthesized
 
 $(BUILD)/macho_test: tests/macho_test.cpp src/MachO.h
