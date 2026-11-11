@@ -12,7 +12,7 @@ macOS's own `/usr/bin/python3`, and is run with `python3 -I -B`.
 | `vendor.py` | checks a release zip against its `SHA256SUMS` and copies the release, Graft's source tree and both kexts, into another repository, with a record of every file | `python3 -I -B tools/vendor.py graft-<version>.zip DEST` |
 | `internal/release.py` | builds a release folder and zip into `dist/` | `make release` |
 | `internal/lint.py` | checks SPDX license lines, text hygiene and Markdown links | `make lint` |
-| `internal/hook-symbols.py` | reports which kernel symbols Graft and its owned client use are defined in a macOS release | `python3 -I -B tools/internal/hook-symbols.py RELEASE...` |
+| `internal/hook-symbols.py` | reports which kernel symbols Graft uses, or those another list names, are defined in a macOS release | `python3 -I -B tools/internal/hook-symbols.py RELEASE...` |
 | `internal/boot-core.py` | boots Graft and the test kexts in a disposable x86-64 guest, and checks the result | `python3 -I -B tools/internal/boot-core.py BASE --env DIR --gpu NAME --account FILE` |
 
 ## vendor.py
@@ -88,14 +88,18 @@ are kept exactly as published.
 
 ## internal/hook-symbols.py
 
-`hook-symbols.txt`, next to the script, lists every kernel symbol Graft and
-its owned client use, how each is reached, and why. `hook-symbols.py` checks a
-macOS release for each of them:
+`hook-symbols.txt`, next to the script, lists every kernel symbol Graft uses,
+how each is reached, and why. `hook-symbols.py` checks a macOS release for each
+of them:
 
 ```sh
 python3 -I -B tools/internal/hook-symbols.py RELEASE...
 python3 -I -B tools/internal/hook-symbols.py --all CACHE [--json]
 ```
+
+A client project checks the kernel symbols it uses with `--symbols FILE`, where
+`FILE` lists them in the same form: each symbol is the first word of its line,
+and a line that starts with `#` is a comment.
 
 A release is a directory that holds that release's x86-64 `kernel`,
 `BootKernelExtensions.kc` and `SystemKernelExtensions.kc`. With `--all`, it
@@ -104,8 +108,9 @@ symbol it prints whether the kernel and each collection defines it, references
 it, or lacks it. It reads the symbol tables in place and keeps nothing from
 them but the names it was asked about and that answer.
 
-It exits 1 when an input is incomplete or unreadable, 2 when a release defines
-a wanted symbol in none of its images, and 0 otherwise.
+It exits 1 when an input is incomplete or unreadable or the list names no
+symbol, 2 when a release defines a wanted symbol in none of its images, and 0
+otherwise.
 
 ## internal/boot-core.py
 
