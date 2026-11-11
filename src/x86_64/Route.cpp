@@ -41,8 +41,15 @@ void **originalStorage[RouteCapacity];
 // The client that holds each slot, empty for Graft's own. A copy, since a client's
 // identifier string need not outlive its call.
 char installedBy[RouteCapacity][KMOD_MAX_NAME];
+// A transaction's scratch, under routeLock: each route's plan, the trap fill
+// its trampoline replaces, its trampoline and entry writes, and the original
+// pointer it replaces. Static rather than on the kernel stack, where the pool's
+// capacity would make the writes and originals alone over 2 KiB.
 x86::RoutePlan plans[RouteCapacity];
 uint8_t oldTrampolines[RouteCapacity][x86::MaxTrampoline];
+Patch trampolineWrites[RouteCapacity];
+Patch entryWrites[RouteCapacity];
+void *priorOriginals[RouteCapacity];
 char refusal[192];
 
 // Under routeLock: the reason a transaction is refused, logged and kept for
@@ -110,9 +117,6 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
     } else if (!complete) {
         refuse("transaction: all %zu shared route slots are reserved", RouteCapacity);
     }
-    Patch trampolines[RouteCapacity]{};
-    Patch entries[RouteCapacity]{};
-    void *prior[RouteCapacity]{};
     for (size_t i = 0; complete && i < count; ++i) {
         auto &request = requests[i];
         if (!request.symbol || !request.replacement || !request.original ||
@@ -149,7 +153,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
                 complete = false;
         }
         for (size_t j = 0; j < i; ++j)
-            if (reinterpret_cast<uint64_t>(entries[j].address) == source ||
+            if (reinterpret_cast<uint64_t>(entryWrites[j].address) == source ||
                 requests[j].original == request.original)
                 complete = false;
         if (heldBy) {
@@ -183,7 +187,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
             }
         }
         for (size_t j = 0; complete && j < i; ++j) {
-            auto other = reinterpret_cast<uint64_t>(entries[j].address);
+            auto other = reinterpret_cast<uint64_t>(entryWrites[j].address);
             if (source <= other ? plans[i].displacedSize > other - source
                                 : plans[j].displacedSize > source - other) {
                 refuse("%s: overlaps another route in this request", request.symbol);
@@ -193,16 +197,16 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
         if (!complete)
             break;
         memcpy(oldTrampolines[i], trampoline, plans[i].trampolineSize);
-        trampolines[i] = {const_cast<uint8_t *>(trampoline), oldTrampolines[i], plans[i].trampoline,
-                          plans[i].trampolineSize};
-        entries[i] = {reinterpret_cast<uint8_t *>(source), plans[i].original, plans[i].entry,
-                      plans[i].displacedSize};
+        trampolineWrites[i] = {const_cast<uint8_t *>(trampoline), oldTrampolines[i],
+                               plans[i].trampoline, plans[i].trampolineSize};
+        entryWrites[i] = {reinterpret_cast<uint8_t *>(source), plans[i].original, plans[i].entry,
+                          plans[i].displacedSize};
     }
     if (complete) {
         // Trampolines are permanent before any entry can use them. An entry
         // rollback must never restore a reachable trampoline to its prior
         // trap-filled storage while a routed entry might remain installed.
-        auto error = applyWrites(trampolines, count);
+        auto error = applyWrites(trampolineWrites, count);
         complete = error == WriteError::None;
         if (!complete) {
             refuse("trampoline preparation: write error %u", static_cast<unsigned>(error));
@@ -216,24 +220,24 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
     if (complete) {
         // Publish callable originals before making the entry batch live.
         for (size_t i = 0; i < count; ++i) {
-            prior[i] = __atomic_load_n(requests[i].original, __ATOMIC_ACQUIRE);
+            priorOriginals[i] = __atomic_load_n(requests[i].original, __ATOMIC_ACQUIRE);
             __atomic_store_n(requests[i].original,
                              const_cast<uint8_t *>(graft_route_storage[used + i]),
                              __ATOMIC_RELEASE);
         }
-        auto error = applyWrites(entries, count);
+        auto error = applyWrites(entryWrites, count);
         complete = error == WriteError::None;
         if (!complete && error != WriteError::Rollback) {
             for (size_t i = 0; i < count; ++i)
-                __atomic_store_n(requests[i].original, prior[i], __ATOMIC_RELEASE);
+                __atomic_store_n(requests[i].original, priorOriginals[i], __ATOMIC_RELEASE);
             refuse("transaction: write error %u", static_cast<unsigned>(error));
         } else {
             // A failed rollback may leave a routed entry. Preserve every
             // original pointer and its verified trampoline, and reserve the
             // entire batch so later requests cannot reuse uncertain state.
             for (size_t i = 0; i < count; ++i) {
-                installed[used + i] = reinterpret_cast<uint64_t>(entries[i].address);
-                installedSize[used + i] = entries[i].size;
+                installed[used + i] = reinterpret_cast<uint64_t>(entryWrites[i].address);
+                installedSize[used + i] = entryWrites[i].size;
                 originalStorage[used + i] = requests[i].original;
                 strlcpy(installedBy[used + i], client ? client : "", KMOD_MAX_NAME);
                 note("route: %s %s", requests[i].symbol,
