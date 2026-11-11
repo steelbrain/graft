@@ -11,7 +11,7 @@ macOS's own `/usr/bin/python3`, and is run with `python3 -I -B`.
 |---|---|---|
 | `vendor.py` | checks a release zip against its `SHA256SUMS` and copies the release, Graft's source tree and both kexts, into another repository, with a record of every file | `python3 -I -B tools/vendor.py graft-<version>.zip DEST` |
 | `internal/release.py` | builds a release folder and zip into `dist/` | `make release` |
-| `internal/lint.py` | checks SPDX license lines, text hygiene and Markdown links | `make lint` |
+| `internal/lint.py` | checks SPDX license lines, text hygiene, Markdown links, and that `src/` and `sdk/` name no kext but Graft and Apple's | `make lint` |
 | `internal/hook-symbols.py` | reports which kernel symbols Graft uses, or those another list names, are defined in a macOS release | `python3 -I -B tools/internal/hook-symbols.py RELEASE...` |
 | `internal/boot-core.py` | boots Graft and the test kexts in a disposable x86-64 guest, and checks the result | `python3 -I -B tools/internal/boot-core.py BASE --env DIR --gpu NAME --account FILE` |
 
@@ -81,7 +81,14 @@ plus new files git would track:
 - every text file ends in exactly one newline, with no trailing whitespace,
   carriage returns or tab indentation (make files may use tabs);
 - every relative Markdown link names a file or directory that exists, and
-  every `#fragment` a heading in its target.
+  every `#fragment` a heading in its target;
+- no file under `src/` or `sdk/` names a bundle identifier other than Graft's
+  own, `ai.aneesiqbal.graft`, Apple's, `com.apple.*`, or one under a domain
+  reserved for examples, such as `com.example.*`. An identifier is a top-level
+  domain followed by two or more labels, so a file name, a version or other
+  dotted text is not one. In a C, C++ or Objective-C file the check reads only
+  comments and string and character literals, since a member access in code can
+  look like an identifier; it reads any other file whole.
 
 The license texts in `LICENSES/` are exempt from the text checks, since they
 are kept exactly as published.

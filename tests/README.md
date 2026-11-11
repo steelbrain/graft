@@ -63,7 +63,7 @@ later with only its standard library.
 | `hook_symbols_test.py` | `tools/internal/hook-symbols.py`: an unreadable input or symbol list is an error, never a missing symbol, and the symbols it reads from `hook-symbols.txt` or a client's list |
 | `release_test.py` | `tools/internal/release.py`: the release's folder and zip, the tracked tree and both kexts, the same zip bytes from another checkout, umask and file modes, the tracked files it builds from and carries, refusing a tree that differs from `HEAD`, a tracked link, a tracked name the release adds, another Xcode, bundles of two versions and a malformed bundle; and every link in this repository's release resolving inside it |
 | `vendor_test.py` | `tools/vendor.py`: taking a zip that `release.py` wrote, with its record; refusing a file that differs from `SHA256SUMS`, a file missing from either, a link, a directory entry, a name outside the zip's one folder, a name twice, a malformed `SHA256SUMS` or `COMMIT`, and a release that holds a `source.toml`; keeping the earlier copy when a copy fails; and never replacing a directory it did not write |
-| `lint_test.py` | `tools/internal/lint.py`: license lines, text hygiene and Markdown links |
+| `lint_test.py` | `tools/internal/lint.py`: license lines, text hygiene, Markdown links, and the bundle identifiers `src/` and `sdk/` may name, in a C file's comments and literals and anywhere in another file |
 
 ## Fixtures
 

@@ -24,6 +24,9 @@ the code, or fix the expectation and say why in the commit.
   from what the running system has (symbols, class sizes, vtable slots, IOKit
   answers) and never from a macOS version. When something is missing, it
   refuses by name and the guest keeps booting.
+- **No kext's identity.** Graft serves any kext, and names none it serves.
+  `src/` and `sdk/` name no bundle identifier but Graft's own and Apple's;
+  `make lint` checks it. A test or example kext uses an identifier of its own.
 - **Provenance.** Nothing taken from Apple's binaries or from a guest enters
   the repository: no disassembly, dumps, excerpts, logs, or per-release
   offsets, sizes, slot counts or discriminators. A constant Graft needs is

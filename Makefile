@@ -17,7 +17,8 @@
 #   make route-probe  build/GraftRouteProbe.kext, the arm64e test-only owned
 #               client that exercises the AMFI route layer
 #   make examples  build both examples (examples/README.md) for x86-64 and arm64e
-#   make lint   check formatting, license lines, text hygiene and doc links
+#   make lint   check formatting, license lines, text hygiene, doc links, and
+#               that src/ and sdk/ name no kext but Graft and Apple's
 #   make format apply clang-format and ruff's formatting
 #   make clean  remove build/
 #   make release  build both kexts from the committed sources, with the Xcode
