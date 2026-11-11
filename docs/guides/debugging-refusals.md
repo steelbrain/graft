@@ -146,9 +146,9 @@ Graft set after a call:
 - `routed: ...` after `graft_route_kernel` installed every route.
 - `refused: ...` naming the route and the reason when it installed none.
 
-A call that passes another identifier than the owned client's, or arrives
-while Graft is not active, or asks for no routes or more than six, returns
-false and records nothing.
+A call whose identifier names no placed kext, or arrives while Graft is not
+active, or asks for no routes or more than sixteen, returns false and records
+nothing.
 
 x86-64 route refusals:
 
@@ -157,10 +157,12 @@ x86-64 route refusals:
 | `live installation after BSD publication` | routes were requested after BSD started. Install them from `graft_client_initialize()` |
 | `invalid request N` | request `N` has no symbol, replacement or original, or its original is not pointer-aligned |
 | `<symbol>: replacement is not in the client's executable text` | the replacement does not point into the client's code, such as a data pointer passed by mistake |
+| `<symbol>: the client's placed image is not in the Boot collection` | Graft cannot find the calling kext as a Boot-collection entry, so it cannot tie the replacement to the client's own code |
+| `<symbol>: already routed by <client>` | that function is already routed by the named client, or by `Graft` for its own binding; the shared pool routes each function once |
 | `<symbol>: missing, duplicate or unreadable function` | the kernel does not define that name exactly once in readable code |
 | `<symbol> at +N: <why>` | the instruction at byte `N` of the function cannot be moved into the trampoline; `<why>` names the reason, below |
-| `<symbol>: overlaps an installed entry` or `overlaps another route in this request` | the function is already routed, or two requests overlap |
-| `transaction: all 8 owned route slots are reserved` | the boot's routes are used up |
+| `<symbol>: overlaps an installed entry` or `overlaps another route in this request` | a route already installed, or another route in this request, covers bytes this one would displace |
+| `transaction: all 32 shared route slots are reserved` | the boot's shared route pool is used up |
 | `installation after an unverified entry rollback` | an earlier route failed and Graft could not confirm it restored the function, so it routes nothing more this boot |
 | `trampoline preparation: write error E`, `transaction: write error E` | a kernel write failed; Graft restored what it wrote. `E` is `WriteError` in `src/WritePlan.h` |
 | `transaction: entry rollback unverified; replacement code and original storage stay resident` | a write failed and Graft could not confirm it restored the functions. The routes may be live, and Graft routes nothing more this boot |
@@ -182,24 +184,26 @@ arm64e route refusals, in the order Graft checks:
 
 | reason | meaning |
 |---|---|
-| `the owned client's routes are already installed` | the client already routed once this boot |
 | `transaction: N requests exceed the 3 routable operations` | the call asks for more routes than there are operations |
 | `invalid request N` | request `N` has no operation, replacement or original, or its original is not pointer-aligned |
 | `request N: duplicate original storage` | two requests store their original in the same place |
+| `<operation>: already routed by an earlier client` | an earlier client already routed that operation this boot; one operation belongs to one client |
 | `AMFI image or its executable range not found` | Graft could not find AMFI's code in the Boot collection |
+| `the client <id> names no placed image` | the firmware published no device-tree node for the calling kext, so Graft cannot tie the replacement to the client's own code |
 | `the client's placed image cannot be read (<why>)` | the firmware names an image for the client's bundle identifier, but its load commands are malformed or its header lies outside its segments |
-| `request N: replacement is not in the client's executable text` | the replacement does not point into the client's code. Graft checks this when the firmware's device tree names an image for the bundle identifier the call passes |
+| `request N: replacement is not in the client's executable text` | the replacement does not point into the client's code. Graft finds the image through the firmware's device-tree node for the bundle identifier the call passes |
 | `mac_policy_register is not resolvable`, `mac_policy_list is not resolvable`, `mac_policy_list is not in the kernel's data segments`, `mac_policy_list entries pointer is invalid` | Graft could not find the kernel's list of MAC policies. The list must lie in a segment the kernel maps writable, and its entries pointer must be a canonical, 8-byte aligned kernel address |
 | `AMFI policy not found in the list`, `AMFI policy ambiguous in the list (N matches)` | Graft could not find AMFI's one registered policy |
-| `<name>: route input` | Graft could not build its copy of AMFI's ops table |
+| `<name>: route input` | Graft could not build its copy of the current ops table |
 | `<name>: operation not routable on arm64` | the request names an operation other than `file_check_mmap`, `file_check_library_validation` or `vnode_check_signature` |
 | `<name>: staged copy too small for the structure` | the operation's slot lies past the end of Graft's copy of AMFI's ops table |
 | `<name>: operation routed twice in one request` | two requests name the same operation |
 | `<name>: live ops slot does not point into AMFI text` | the slot Graft would replace in AMFI's table does not hold a pointer into AMFI's code, so Graft does not trust the table |
 | `<name>: live ops slot is not signed with the operation's discriminator` | the slot's pointer is not signed with the discriminator Graft derives from the operation's `mpo_*_t` prototype in XNU's `security/mac_policy.h`, as when a release changed that prototype. Graft routes nothing, rather than a slot the kernel would fail to authenticate |
-| `shadow conf: <why>` | Graft could not build its copy of AMFI's conf |
+| `shadow conf: <why>` | Graft could not build its copy of the current conf |
+| `shadow allocation unavailable or misaligned` | Graft could not obtain 8-aligned memory for the new shadow ops and conf |
 | `policy-list element is not in writable memory` | the list entry Graft would swap cannot be written |
-| `policy-list element did not hold AMFI's conf` | the list entry changed before Graft swapped it. Nothing was written |
+| `policy-list element did not hold the current conf` | the list entry changed before Graft swapped it. Nothing was written |
 
 ## Reading the codes
 

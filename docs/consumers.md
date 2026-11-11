@@ -13,10 +13,10 @@ what Graft does with each kext at boot.
 
 Graft binds every bound consumer placed at boot, whatever its bundle
 identifier: a kext declares itself one by the manifest it carries, and its
-personalities may match any provider. Graft serves calls that pass the owned
-client's identifier, `ai.aneesiqbal.RgfxGate`, which `src/Policy.h` names.
-Serving another owned client means changing `src/Policy.h` and rebuilding
-Graft.
+personalities may match any provider. It serves any placed kext as an owned
+client too: a call is served when its identifier names a kext the boot linker
+placed. So neither kind is named in `src/Policy.h`, and neither needs a change
+to Graft.
 
 Everything a kext builds with is in [sdk/](../sdk/README.md). Another
 repository takes a release, the SDK included, with `tools/vendor.py`

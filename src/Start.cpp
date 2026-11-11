@@ -2,9 +2,11 @@
 // Graft's kmod entry point and the C interface its clients call (Graft.h).
 // graft_start initializes diagnostics, the kernel image, the write and route
 // facilities and the catalogue binding from the kmod load, before the Graft
-// service starts. The extern "C" functions that act on the kernel require
-// Graft active and the owned client's identifier; the log and state calls
-// check only the identifier. The architecture-neutral core does the work.
+// service starts. A call's identifier is accepted when it names a placed kext
+// (placedBase); the functions that act on the kernel additionally require Graft
+// active. Graft is not pinned to any one client's name. The
+// architecture-neutral core does the work.
+#include "BindingPlacement.h"
 #include "KernelBinding.h"
 #include "KernelWrite.h"
 #include "Log.h"
@@ -25,15 +27,22 @@ OSDefineMetaClassAndStructors(Graft, IOService);
 
 namespace {
 graft::RuntimeImage kernel;
+const mach_header_64 *bootCollection;
 bool ready;
 
-bool ownedClient(const char *identifier) {
-    return identifier && !strcmp(identifier, graft::policy::OwnedClientIdentifier);
+// A call's identifier is accepted when it names a kext the boot linker placed:
+// on x86-64 a fileset entry in the Boot collection, on arm64e a device-tree node
+// the firmware wrote (graft::placedBase). Graft is not pinned to any one name,
+// and a placed identifier is what makes every GraftClient.<id> registry key name
+// a real kext.
+bool placedClient(const char *identifier) {
+    auto collection = __atomic_load_n(&bootCollection, __ATOMIC_ACQUIRE);
+    return identifier && graft::placedBase(collection, identifier) != 0;
 }
 } // namespace
 
 extern "C" bool graft_client_ready(const char *identifier) {
-    return ownedClient(identifier) && __atomic_load_n(&ready, __ATOMIC_ACQUIRE);
+    return __atomic_load_n(&ready, __ATOMIC_ACQUIRE) && placedClient(identifier);
 }
 
 extern "C" bool graft_kernel_symbol(const char *identifier, const char *symbol, uint64_t *address) {
@@ -51,16 +60,16 @@ extern "C" bool graft_kernel_symbol(const char *identifier, const char *symbol, 
 extern "C" bool graft_route_kernel(const char *identifier, const graft_route_request *requests,
                                    size_t count) {
     if (!graft_client_ready(identifier) || !requests || !count ||
-        count > graft::policy::MaxClientRoutes)
+        count > graft::policy::MaxRequestRoutes)
         return false;
-    graft::RouteRequest routes[graft::policy::MaxClientRoutes]{};
+    graft::RouteRequest routes[graft::policy::MaxRequestRoutes]{};
     for (size_t i = 0; i < count; ++i)
         routes[i] = {requests[i].symbol, requests[i].replacement, requests[i].original};
     return graft::routeKernel(identifier, routes, count);
 }
 
 extern "C" void graft_client_log(const char *identifier, const char *format, ...) {
-    if (!ownedClient(identifier) || !format)
+    if (!placedClient(identifier) || !format)
         return;
     char line[320];
     va_list arguments;
@@ -71,7 +80,7 @@ extern "C" void graft_client_log(const char *identifier, const char *format, ...
 }
 
 extern "C" void graft_client_state(const char *identifier, const char *state, const char *reason) {
-    if (ownedClient(identifier) && state && reason)
+    if (placedClient(identifier) && state && reason)
         graft::clientState(identifier, state, reason);
 }
 
@@ -86,6 +95,9 @@ extern "C" kern_return_t graft_start(kmod_info_t *, void *) {
         graft::setState("refused", "kernel collection or calibrated symbols unavailable");
         return KERN_SUCCESS;
     }
+    // Keep the Boot collection for placedClient: it tells a placed kext's
+    // identifier from any other, so every served call names real placed code.
+    __atomic_store_n(&bootCollection, collection, __ATOMIC_RELEASE);
     if (!graft::initializeWrites(kernel) || !graft::initializeRoutes(kernel)) {
         graft::setState("refused", "kernel write/routing facilities unavailable");
         return KERN_SUCCESS;
@@ -95,7 +107,7 @@ extern "C" kern_return_t graft_start(kmod_info_t *, void *) {
         return KERN_SUCCESS;
     }
     __atomic_store_n(&ready, true, __ATOMIC_RELEASE);
-    graft::setState("active", "catalogue binding and owned client routing initialized");
+    graft::setState("active", "catalogue binding and client routing initialized");
     graft::bindConsumers();
     return KERN_SUCCESS;
 }

@@ -9,9 +9,10 @@ This README maps the files and follows a boot through them.
 and [docs/manifest.md](../docs/manifest.md) specifies what a consumer embeds.
 
 The code is C++17 for the kernel: no exceptions, no RTTI, no standard library.
-Types are PascalCase, functions and variables camelCase. The owned client's
-identity is in one place, [Policy.h](Policy.h); Graft holds no bound
-consumer's.
+Types are PascalCase, functions and variables camelCase. The constants of the
+generic mechanism are in one place, [Policy.h](Policy.h): AMFI's identifier and
+the route limits. Graft names neither a client nor a consumer there; a client
+is identified by placement, and a consumer declares itself by its manifest.
 
 ## The boot, end to end
 
@@ -35,8 +36,8 @@ records why, stops, and returns success so the guest keeps booting.
    kernel's two catalogue entry points, so that each later catalogue send calls
    Graft back. On arm64e there is no trigger: the boot firmware placed every
    image before Graft started.
-5. **Active.** Graft marks itself active, so the owned client may call it, and
-   makes a first `bindConsumers` attempt.
+5. **Active.** Graft marks itself active, so a client may call it, and makes a
+   first `bindConsumers` attempt.
 
 After that:
 
@@ -52,13 +53,12 @@ After that:
 ### Entry and interface
 
 - [Start.cpp](Start.cpp): the kmod entry (`graft_start`, `graft_stop`), the
-  `Graft` IOService, and the `extern "C"` functions clients call. The three
-  that act on the kernel require Graft to be active and the owned client's
-  identifier; the log and state calls check only the identifier.
-- [Policy.h](Policy.h): the owned client Graft serves, AMFI's bundle
-  identifier, whose policy the arm64e routes shadow, and the
-  route limits: at most six routes in one call, and eight route slots on
-  x86-64.
+  `Graft` IOService, and the `extern "C"` functions clients call. Every call's
+  identifier must name a placed kext (`placedBase`); the three that act on the
+  kernel also require Graft to be active.
+- [Policy.h](Policy.h): AMFI's bundle identifier, whose policy the arm64e routes
+  shadow, and the route limits: at most sixteen routes in one call, and a shared
+  pool of thirty-two route slots on x86-64.
 
 ### Diagnostics
 
@@ -132,9 +132,10 @@ After that:
   branch displacement, with checked arithmetic.
 - [x86_64/X86Route.h](x86_64/X86Route.h): instruction decoding and building a
   route's entry patch and trampoline.
-- [x86_64/Route.cpp](x86_64/Route.cpp): the route installer. It reserves
-  executable slots, refuses duplicates and overlaps, refuses once BSD is
-  published, and commits trampolines before entries.
+- [x86_64/Route.cpp](x86_64/Route.cpp): the route installer. It reserves slots
+  from the shared executable pool, refuses a function another client already
+  holds (naming that client) and overlaps, refuses once BSD is published, and
+  commits trampolines before entries.
 - [x86_64/KernelWrite.cpp](x86_64/KernelWrite.cpp): the write window, which
   clears `CR0.WP` with the other CPUs stopped and serializes instruction
   fetch.
@@ -155,14 +156,17 @@ After that:
   lockdown and the consumer is dormant, so there is no window to open.
 - [arm64e/Arm64Route.h](arm64e/Arm64Route.h), [arm64e/Route.cpp](arm64e/Route.cpp):
   routing by shadowing AMFI's MAC policy. Kernel text and AMFI's
-  `mac_policy_ops` are read-only when Graft runs, so Graft copies AMFI's
-  `mac_policy_ops` and `mac_policy_conf` into its own memory, re-signs the
-  routed operations in the copy for the client's replacements, and repoints the
-  writable `mac_policy_list` element that held AMFI's conf at the copy. The
-  repoint is one atomic compare-and-exchange, which refuses if the element no
-  longer holds AMFI's conf. The client's image, which the replacements must lie
-  in, is found through its device-tree node (`placedBase`). Arm64Route.h is the plan, which the host tests
-  run; Route.cpp does the live reads and the swap.
+  `mac_policy_ops` are read-only when Graft runs, so each client's request
+  copies the current `mac_policy_ops` and `mac_policy_conf` (AMFI's own the
+  first time, the newest shadow after) into fresh memory, re-signs the routed
+  operations in the copy for the client's replacements, and repoints the
+  writable `mac_policy_list` element at the copy. The repoint is one atomic
+  compare-and-exchange, which refuses if the element no longer holds the conf it
+  currently expects. Several clients route one after another, and an operation
+  one client holds is refused to the next. The client's image, which the
+  replacements must lie in, is found as the consumer's is (`placedBase`) and is
+  required. Arm64Route.h is the plan, which the host tests run; Route.cpp does
+  the live reads and the swap.
 - [arm64e/BindingPlacement.cpp](arm64e/BindingPlacement.cpp): no trigger to
   install. A provider is its fileset entry in the Boot collection, and the
   consumers are found among the device-tree nodes of the placed kexts. Nothing waits for a kext to
@@ -234,9 +238,9 @@ following from the firmware:
 - **`/chosen/ambrosia/<bundle id>`, property `base`.** One node per placed
   kext, named by its bundle identifier. 8 bytes: the slid address of the
   kext's Mach-O header. Graft reads each one at start and binds, as a
-  consumer, each kext whose image carries a manifest. It reads the owned
-  client's to check that its route replacements lie in its code. The other
-  children of `/chosen/ambrosia`, such as `vtable-disc`, have no `base`.
+  consumer, each kext whose image carries a manifest. It reads a client's to
+  check that its route replacements lie in its code. The other children of
+  `/chosen/ambrosia`, such as `vtable-disc`, have no `base`.
 - **`/chosen/ambrosia/vtable-disc`.** One child node per vtable a synthesized
   class needs ([docs/guides/synthesized-class.md](../docs/guides/synthesized-class.md)),
   with these properties:

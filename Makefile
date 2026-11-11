@@ -133,7 +133,7 @@ $(BUILD)/binding_test: tests/binding_test.cpp src/Binding.h src/Fixup.h src/x86_
 	@mkdir -p $(BUILD)
 	$(HOSTCXX) -arch x86_64 -Isrc tests/binding_test.cpp -o $@
 
-$(BUILD)/x86_route_test: tests/x86_route_test.cpp src/x86_64/X86Route.h src/x86_64/Fixup.h src/FixupShared.h
+$(BUILD)/x86_route_test: tests/x86_route_test.cpp src/x86_64/X86Route.h src/x86_64/Fixup.h src/FixupShared.h src/Policy.h
 	@mkdir -p $(BUILD)
 	$(HOSTCXX) -arch x86_64 -Isrc $< -o $@
 

@@ -11,10 +11,10 @@ them: [Write a bound consumer](../docs/guides/bound-consumer.md) and
 | [hello-client](hello-client/README.md) | owned client | a kext that calls Graft's C interface to look up a kernel symbol and publish its state |
 
 Graft binds every placed kext that carries a manifest, so the consumer has a
-bundle identifier of its own, `ai.aneesiqbal.graft.HelloConsumer`. Graft serves
-calls only for the owned client `src/Policy.h` names, so the client passes
-`ai.aneesiqbal.RgfxGate` in its calls. A client of your own needs that identity
-too, or a Graft built with yours in `src/Policy.h`.
+bundle identifier of its own, `ai.aneesiqbal.graft.HelloConsumer`. The client
+passes its own bundle identifier, `ai.aneesiqbal.graft.HelloClient`: Graft
+serves any placed kext, so a client of your own just passes its own identifier.
+Neither kind needs a change to Graft.
 
 Each has its own Makefile and builds for x86-64 by default, or for arm64e with
 `make ARCH='-arch arm64e'`. From the repository root, `make examples` builds

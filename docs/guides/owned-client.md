@@ -7,12 +7,12 @@ does is the client's own policy. This guide builds one, using
 [examples/hello-client](../../examples/hello-client/README.md) as the running
 example.
 
-Graft serves one owned client, the identifier `src/Policy.h` names:
-`ai.aneesiqbal.RgfxGate`. Every call passes an identifier, and Graft serves
-only calls that pass that one, whichever kext makes them. The example's own
-bundle identifier is `ai.aneesiqbal.graft.HelloClient`, and it passes
-`ai.aneesiqbal.RgfxGate` in its calls. To serve another identifier, change
-`OwnedClientIdentifier` in `src/Policy.h` and build Graft yourself.
+Graft is pinned to no fixed client name. Every call passes an identifier, and
+Graft serves it when that identifier names a kext the boot linker placed: a
+fileset entry in the Boot collection on x86-64, a device-tree node the firmware
+wrote on arm64e. So a client passes its own bundle identifier; the example
+passes `ai.aneesiqbal.graft.HelloClient`, which is also its
+`CFBundleIdentifier`. No change to Graft is needed to serve a new client.
 
 ## What you need
 
@@ -29,9 +29,9 @@ It declares five calls, each documented in
 
 | call | does |
 |---|---|
-| `graft_client_ready(id)` | returns whether Graft is active and `id` is the owned client's |
+| `graft_client_ready(id)` | returns whether Graft is active and `id` names a placed kext |
 | `graft_kernel_symbol(id, symbol, &address)` | looks `symbol` up by name in the running kernel's own symbol table; a miss sets the client's state to `refused`, naming the symbol |
-| `graft_route_kernel(id, requests, count)` | installs up to six routes, all of them or none |
+| `graft_route_kernel(id, requests, count)` | installs up to sixteen routes, all of them or none |
 | `graft_client_log(id, format, ...)` | adds a line to Graft's log |
 | `graft_client_state(id, state, reason)` | sets the client's state in the IORegistry |
 
@@ -69,7 +69,7 @@ its state:
 ```cpp
 #include <graft/Graft.h>
 
-constexpr const char *Client = "ai.aneesiqbal.RgfxGate";
+constexpr const char *Client = "ai.aneesiqbal.graft.HelloClient";
 
 void graft_client_initialize() {
     if (!graft_client_ready(Client)) {
@@ -120,7 +120,7 @@ graft_route_request routes[] = {
      &originalExample},
 };
 if (!graft_route_kernel(Client, routes, 1))
-    return; // GraftClient.ai.aneesiqbal.RgfxGate says why
+    return; // GraftClient.ai.aneesiqbal.graft.HelloClient says why
 ```
 
 [tests/kexts/core-probe](../../tests/kexts/README.md#core-probe) routes six
@@ -159,7 +159,7 @@ graft_route_request routes[] = {
     {"file_check_mmap", reinterpret_cast<void *>(replacementMmap), &originalMmap},
 };
 if (!graft_route_kernel(Client, routes, 1))
-    return; // GraftClient.ai.aneesiqbal.RgfxGate says why
+    return; // GraftClient.ai.aneesiqbal.graft.HelloClient says why
 ```
 
 [tests/kexts/route-probe](../../tests/kexts/README.md#route-probe) routes all
@@ -167,10 +167,11 @@ three operations.
 
 ## Limits
 
-- One call installs at most six routes, all of them or none. On x86-64 Graft
-  has room for eight routes per boot: two of its own, and six for the client.
-  On arm64e the client routes once per boot, at most one route for each of the
-  three operations.
+- One call installs at most sixteen routes, all of them or none. On x86-64
+  Graft has room for 32 routes per boot, shared first come first served: two of
+  its own, and up to 30 more across every client. On arm64e each client routes
+  at most one of each of the three operations, and several clients route one
+  after another; an operation one client holds is refused to the next.
 - On x86-64, routes must be installed before BSD starts, so install them from
   `graft_client_initialize()`. The arm64e routes go live with one atomic swap
   of AMFI's policy, and are safe to install after BSD has started.
@@ -178,10 +179,11 @@ three operations.
   ends within the 14 bytes the jump needs, one whose first instructions it
   cannot decode or relocate, one with a displaced call that would return into
   the jump, and one that is already routed.
-- On both architectures, Graft refuses a replacement outside the client's
+- On both architectures, Graft refuses a replacement outside the client's own
   executable code. It finds the client's image by the bundle identifier the
   call passes: its Boot collection entry on x86-64, or the firmware's
-  device-tree node for it on arm64e. When it finds none, it does not check.
+  device-tree node for it on arm64e. When it finds no image, it refuses the
+  route, so a route's replacement is always the client's real placed code.
   [design.md](../design.md#routing) lists the rules.
 - Graft passes each call through without reading its arguments, so the
   replacement's prototype must match the routed function's.
@@ -216,7 +218,7 @@ ioreg -l -d 1 | grep Graft
 The example reads:
 
 ```
-"GraftClient.ai.aneesiqbal.RgfxGate" = "ready: resolved _IOLog"
+"GraftClient.ai.aneesiqbal.graft.HelloClient" = "ready: resolved _IOLog"
 ```
 
 A client that routes reads `routed:` and the number of routes, or `refused:`
@@ -228,5 +230,5 @@ log show --last boot --predicate 'process == "kernel"' | grep graft:
 ```
 
 `graft_route_kernel` returns false and records nothing when Graft is not
-active or the request has no routes or more than six.
+active or the request has no routes or more than sixteen.
 [debugging-refusals.md](debugging-refusals.md) explains each refusal.

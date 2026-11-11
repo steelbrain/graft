@@ -17,14 +17,15 @@
 #include <mach/vm_prot.h>
 #include <stdarg.h>
 
-// The two catalogue routes and an owned client's MAC dispatchers (Policy.h).
+// The shared executable route pool (Policy.h): Graft's own two catalogue routes
+// plus up to thirty more across every client, first come first served.
 constexpr size_t RouteCapacity = graft::policy::RouteCapacity;
-static_assert(RouteCapacity * graft::x86::MaxTrampoline == 2048, "executable route storage size");
+static_assert(RouteCapacity * graft::x86::MaxTrampoline == 8192, "executable route storage size");
 extern "C" const uint8_t graft_route_storage[RouteCapacity][graft::x86::MaxTrampoline];
 __asm__(".section __TEXT,__graft_routes,regular,pure_instructions\n"
         ".p2align 4\n"
         "_graft_route_storage:\n"
-        ".fill 2048,1,0xcc\n"
+        ".fill 8192,1,0xcc\n"
         ".text\n");
 
 namespace graft {
@@ -36,6 +37,7 @@ bool uncertain;
 uint64_t installed[RouteCapacity];
 size_t installedSize[RouteCapacity];
 void **originalStorage[RouteCapacity];
+const char *installedBy[RouteCapacity]; // the client that holds each slot, null for Graft's own
 x86::RoutePlan plans[RouteCapacity];
 uint8_t oldTrampolines[RouteCapacity][x86::MaxTrampoline];
 char refusal[192];
@@ -53,7 +55,8 @@ void refuse(const char *format, ...) {
 
 // Whether `address` lies in an executable segment of `client`'s fileset entry in
 // the Boot collection. Unknown when the client has no name (Graft's own routes)
-// or no entry here, so the replacement is left unchecked rather than refused.
+// or no entry here; a named client whose entry is not here refuses, so a route's
+// replacement is always tied to the client's real placed code.
 enum class ClientText { Unknown, Inside, Outside };
 
 ClientText replacementInClientText(const char *client, uint64_t address) {
@@ -102,7 +105,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
         refuse("live installation after BSD publication");
         complete = false;
     } else if (!complete) {
-        refuse("transaction: all %zu owned route slots are reserved", RouteCapacity);
+        refuse("transaction: all %zu shared route slots are reserved", RouteCapacity);
     }
     Patch trampolines[RouteCapacity]{};
     Patch entries[RouteCapacity]{};
@@ -115,25 +118,48 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
             complete = false;
             break;
         }
-        // When the owned client's image is locatable, require its replacement to
-        // lie in one of the client's executable segments, so a client that passes
-        // a data pointer refuses here rather than faulting on the first call.
-        if (replacementInClientText(client, reinterpret_cast<uint64_t>(request.replacement)) ==
-            ClientText::Outside) {
-            refuse("%s: replacement is not in the client's executable text", request.symbol);
-            complete = false;
-            break;
+        // Require a named client's replacement to lie in one of its own
+        // executable segments, so a client that passes a data pointer, or one
+        // whose placed image Graft cannot find, refuses here rather than faulting
+        // on the first call. Graft's own catalogue routes (null client) are
+        // exempt: their replacements live in Graft's image, not a client's.
+        if (client) {
+            auto where = replacementInClientText(client,
+                                                 reinterpret_cast<uint64_t>(request.replacement));
+            if (where != ClientText::Inside) {
+                refuse(where == ClientText::Outside
+                               ? "%s: replacement is not in the client's executable text"
+                               : "%s: the client's placed image is not in the Boot collection",
+                       request.symbol);
+                complete = false;
+                break;
+            }
         }
         uint64_t source = kernel->resolve(request.symbol);
         uint64_t extent = source ? kernel->symbolExtent(source) : 0;
         size_t available = extent < x86::MaxDisplaced ? extent : x86::MaxDisplaced;
-        for (size_t j = 0; j < used; ++j)
-            if (installed[j] == source || originalStorage[j] == request.original)
+        const char *heldBy = nullptr;
+        bool held = false;
+        for (size_t j = 0; j < used; ++j) {
+            if (source && installed[j] == source) {
+                held = true;
+                heldBy = installedBy[j];
+            }
+            if (originalStorage[j] == request.original)
                 complete = false;
+        }
         for (size_t j = 0; j < i; ++j)
             if (reinterpret_cast<uint64_t>(entries[j].address) == source ||
                 requests[j].original == request.original)
                 complete = false;
+        if (held) {
+            // The pool is shared first come first served, and the slot already
+            // holds this function. Name the client that routed it, so a second
+            // client sees the collision in its own refusal state.
+            refuse("%s: already routed by %s", request.symbol, heldBy ? heldBy : "Graft");
+            complete = false;
+            break;
+        }
         if (!complete || !source || !kernel->contains(source, available, VM_PROT_EXECUTE)) {
             refuse("%s: missing, duplicate or unreadable function", request.symbol);
             complete = false;
@@ -209,6 +235,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
                 installed[used + i] = reinterpret_cast<uint64_t>(entries[i].address);
                 installedSize[used + i] = entries[i].size;
                 originalStorage[used + i] = requests[i].original;
+                installedBy[used + i] = client;
                 note("route: %s %s", requests[i].symbol,
                      complete ? "installed" : "retained after unverified rollback");
             }

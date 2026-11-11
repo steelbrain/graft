@@ -135,6 +135,13 @@ void eachPlacedKext(const mach_header_64 *collection,
     });
 }
 
+uint64_t placedBase(const mach_header_64 *collection, const char *identifier) {
+    // OpenCore injects every kext Graft serves into the Boot collection, so it is
+    // a fileset entry there. The identity gate (src/Start.cpp) accepts a client by
+    // this, and the route layer ties its replacements to the client's own code.
+    return macho::filesetEntry(collection, identifier);
+}
+
 bool writableConsumerTarget(const RuntimeImage &consumer, uint64_t address, uint64_t size) {
     // x86-64 binds branch sites in __TEXT, so a mapped, readable target is allowed;
     // the write window clears CR0.WP for the store.

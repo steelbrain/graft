@@ -12,14 +12,15 @@ documents each call.
 kmod from `GRAFT_CLIENT_ID` and calls `graft_client_initialize()` once from the
 kext's start routine. That function:
 
-- checks `graft_client_ready`, which is true only when Graft is active;
+- checks `graft_client_ready`, which is true only when Graft is active and the
+  identifier names a placed kext;
 - looks one kernel symbol up with `graft_kernel_symbol` (`_IOLog`, exported on
   every release) and logs its address with `graft_client_log`;
 - publishes its state with `graft_client_state`.
 
-Graft serves API calls only for the one owned client `src/Policy.h` names,
-`ai.aneesiqbal.RgfxGate`. Every call passes that identifier, not this kext's own
-bundle identifier (`ai.aneesiqbal.graft.HelloClient`).
+Graft serves a call when its identifier names a placed kext, so this client
+passes its own bundle identifier, `ai.aneesiqbal.graft.HelloClient`. Graft is
+pinned to no fixed name, and no change to Graft is needed to serve it.
 
 This client installs no routes. Routing a kernel function, with the trampoline
 and the callable original, is shown by the test client
@@ -53,9 +54,9 @@ no boot-args. In the guest:
 ioreg -l -d 1 | grep Graft
 ```
 
-shows `GraftClient.ai.aneesiqbal.RgfxGate` set to `ready: resolved _IOLog`. The
-same line, and the logged address, go to the kernel log with the prefix
-`graft:`:
+shows `GraftClient.ai.aneesiqbal.graft.HelloClient` set to `ready: resolved
+_IOLog`. The same line, and the logged address, go to the kernel log with the
+prefix `graft:`:
 
 ```sh
 log show --last boot --predicate 'process == "kernel"' | grep graft:

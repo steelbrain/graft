@@ -56,9 +56,12 @@ bool kextStarted(const char *identifier);
 // rw- plus SG_READ_ONLY and a store to it faults once the kernel locks it.
 bool writableConsumerTarget(const RuntimeImage &consumer, uint64_t address, uint64_t size);
 
-// arm64 only: the slid sub-header address of the kext placed with bundle
-// identifier `identifier`, 0 on a miss, read from the boot firmware's device tree
-// (/chosen/ambrosia/<identifier>). The arm64e route finds the owned client by it;
-// on x86-64 the route reads the client's Boot-collection fileset entry itself.
+// The slid sub-header address of the kext placed with bundle identifier
+// `identifier`, 0 on a miss. x86-64 reads the Boot collection's fileset entry,
+// where OpenCore injected the kext; arm64e reads its per-kext base from the boot
+// firmware's device tree (/chosen/ambrosia/<identifier>), since the kexts Graft
+// serves land in the Auxiliary collection, not the Boot one. The identity gate
+// (src/Start.cpp) accepts a client by it, and the arm64e route finds a client's
+// image with it.
 uint64_t placedBase(const mach_header_64 *bootCollection, const char *identifier);
 } // namespace graft
