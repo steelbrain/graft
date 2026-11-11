@@ -121,22 +121,49 @@ reims-vgpu's paravirtual GPU, which renders on the host GPU `NAME`.
 
 ```sh
 python3 -I -B tools/internal/boot-core.py BASE --env DIR --gpu NAME --account FILE \
-    [--probe build/GraftCoreProbe.kext] [--hello-consumer build/GraftHelloConsumer.kext]
+    [--consumer KEXT STATE]... [--client KEXT STATE]...
 ```
 
 `BASE` is an installed x86-64 macOS guest, with its OpenCore disk, which the
 script never boots in place. `FILE` holds the guest's admin account name on its
-first line and its password on the second. The script:
+first line and its password on the second.
+
+Each `--consumer` names a bound consumer to inject and each `--client` a
+client, with any number of each. `STATE` is what Graft's report on that kext,
+`GraftClient.<bundle id>`, must begin with: a state such as `bound`, `refused`,
+`routed` or `ready`, or more of the report, such as a refusal's reason. The
+script reads each kext's bundle identifier and executable from its
+`Info.plist`, and refuses two kexts with one folder name or one bundle
+identifier. One boot of both consumers and both clients:
+
+```sh
+python3 -I -B tools/internal/boot-core.py BASE --env DIR --gpu NAME --account FILE \
+    --consumer build/GraftHelloConsumer.kext bound \
+    --consumer build/GraftGateProbe.kext bound \
+    --client build/GraftCoreProbe.kext routed \
+    --client build/GraftHelloClient.kext ready
+```
+
+The script:
 
 1. copies `BASE`, refusing a source another process can write;
-2. replaces the copy's injected kexts with `build/Graft.kext` and the test kexts
+2. replaces the copy's injected kexts with `build/Graft.kext` and the kexts
    given, clears its boot-args and `csr-active-config`, and checks that the
    injected Graft is the one built here;
 3. boots the copy headless, logs in if it stops at the login window, and waits
    for the desktop;
-4. requires `GraftState` `active`, each test kext's state `passed`, SIP on,
+4. reads the registry until each kext's report is as expected or refused, for
+   up to 145 seconds, since a consumer's report changes as its providers load
+   and its gate opens;
+5. requires `GraftState` `active`, each kext's report to begin with its
+   `STATE`, a consumer given `bound` to have its activation gate open, each
+   test kext's own state `passed` unless its `STATE` is a refusal, SIP on,
    `csr-active-config` 0, no boot-args, and no `reims-vgpu: fatal` line in
    QEMU's log on the host.
+
+The test kexts' own states are core-probe's `GraftProbeState`,
+hello-consumer's `GraftHelloConsumerState`, and the key each of gate-probe's
+personalities sets, named by its `GraftGateCategory`.
 
 It stops and deletes the copy even when a check fails. Results, screenshots and
 logs stay in `build/boot-core`. [tests/kexts/](../tests/kexts/README.md)

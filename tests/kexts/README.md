@@ -23,8 +23,9 @@ It is built by the top Makefile:
 make core-probe   # build/GraftCoreProbe.kext
 ```
 
-[tools/internal/boot-core.py](../../tools/internal/boot-core.py) injects it with
-`--probe` and requires `GraftProbeState` to reach `passed`.
+[tools/internal/boot-core.py](../../tools/internal/boot-core.py) injects it as a
+client, `--client build/GraftCoreProbe.kext routed`, and requires
+`GraftProbeState` to reach `passed`.
 
 ## route-probe
 
@@ -65,4 +66,10 @@ make -C tests/kexts/gate-probe REFUSE=1             # the forced-refuse variant
 The `REFUSE=1` variant declares an absent provider anchor
 (`src/graft-refuse.json`), so Graft refuses the bind and never opens the gate;
 it shows that a refused consumer stays dormant with no category started.
-boot-core.py does not inject gate-probe.
+
+boot-core.py injects it as a consumer, `--consumer build/GraftGateProbe.kext
+bound`, and requires the key each started personality sets on the registry
+root, named by its `GraftGateCategory`, to read `passed`. The `REFUSE=1`
+variant goes in as `--consumer build/GraftGateProbe-refuse.kext refused`, or
+with more of the refusal as its state, beside other kexts to show that one
+consumer's refusal leaves the others bound.
