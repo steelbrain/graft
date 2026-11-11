@@ -23,7 +23,8 @@ bundle identifier is read from the kext's Info.plist. The script:
    refused, SIP enabled, csr-active-config 0, no boot-args, and no `reims-vgpu: fatal`
    line on the host.
 The copy is stopped and deleted even on a failed check. Results, screenshots and logs
-stay in build/boot-core; the final screenshot needs inspecting.
+stay in build/boot-core; the final screenshot needs inspecting. Graft's steps are in GraftLog
+in registry.json, and kernel-log.txt keeps the kernel's own lines that name an injected kext.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from typing import Any, NamedTuple
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build/boot-core"
 GRAFT = ROOT / "build/Graft.kext"
+GRAFT_ID = "ai.aneesiqbal.graft"
 # Apple's NVRAM variable GUID, which holds boot-args and csr-active-config.
 APPLE_NVRAM_GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 # The test kexts that publish states of their own on the registry root, by bundle
@@ -136,8 +138,10 @@ def read_kext(path: str, expected: str, consumer: bool) -> Kext:
         raise SystemExit(f"{path} has no readable Contents/Info.plist") from None
     identifier = info.get("CFBundleIdentifier")
     executable = info.get("CFBundleExecutable")
+    # The identifier also goes into a shell command in the guest (Clone.kernel_log).
     if not (
         isinstance(identifier, str)
+        and re.fullmatch(r"[A-Za-z0-9.-]+", identifier)
         and isinstance(executable, str)
         and (bundle / "Contents/MacOS" / executable).is_file()
     ):
@@ -443,6 +447,24 @@ class Clone:
             time.sleep(2)
         raise RuntimeError("guest has not logged in to the desktop")
 
+    def kernel_log(self, identifiers: list[str]) -> str:
+        """The kernel's lines this boot that name one of identifiers, such as a failed load.
+
+        Graft's own `graft:` lines are not among them: the x86-64 kernel keeps every line a kext
+        OpenCore injected writes with IOLog, printf or os_log out of the unified log, so
+        GraftLog, in registry.json, holds Graft's steps. The guest's login shell, zsh, has a log
+        builtin of its own, so this runs /usr/bin/log, and a failed read raises.
+        """
+        named = " OR ".join(f'eventMessage CONTAINS "{identifier}"' for identifier in identifiers)
+        result = self.ssh(
+            "/usr/bin/log show --last boot --style compact "
+            f"--predicate 'process == \"kernel\" AND ({named})'"
+        )
+        if result.returncode:
+            why = result.stdout.strip()[-300:]
+            raise RuntimeError(f"cannot read the guest's kernel log: {why}")
+        return result.stdout
+
     def wait_for_kexts(self, kexts: list[Kext]) -> dict[str, Any]:
         """The registry state, once each given kext is as expected or has been refused.
 
@@ -521,10 +543,7 @@ def main() -> None:
         guest = clone.ssh(
             "sw_vers; uptime; csrutil status; nvram csr-active-config; nvram boot-args; "
             f"printf '{account.password}\\n' | sudo -S -p '' kmutil showloaded --list-only 2>&1 "
-            "| grep -Ei 'graft|lilu|reims|rgfx'; "
-            "log show --last boot --style compact --predicate "
-            '\'process == "kernel" AND eventMessage CONTAINS[c] "ai.aneesiqbal.graft"\' '
-            "2>/dev/null | tail -30; stat -f %Su /dev/console"
+            "| grep -Ei 'graft|lilu|reims|rgfx'; stat -f %Su /dev/console"
         )
         (OUT / "probe.txt").write_text(guest.stdout)
         print(guest.stdout, flush=True)
@@ -541,6 +560,9 @@ def main() -> None:
         state = clone.wait_for_kexts(kexts)
         (OUT / "registry.json").write_text(json.dumps(state, indent=2) + "\n")
         print(json.dumps(state, indent=2), flush=True)
+        kernel_log = clone.kernel_log([GRAFT_ID, *identifiers])
+        (OUT / "kernel-log.txt").write_text(kernel_log)
+        print(kernel_log, flush=True)
         clone.screendump("desktop.ppm")
         if state.get("GraftState") != "active":
             raise RuntimeError("Graft did not report active")

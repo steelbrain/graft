@@ -173,5 +173,12 @@ hello-consumer's `GraftHelloConsumerState`, and the key each of gate-probe's
 personalities sets, named by its `GraftGateCategory`.
 
 It stops and deletes the copy even when a check fails. Results, screenshots and
-logs stay in `build/boot-core`. [tests/kexts/](../tests/kexts/README.md)
-describes the test kexts.
+logs stay in `build/boot-core`. Graft's steps are in `GraftLog`, in
+`registry.json`: the unified log of an x86-64 guest keeps no line an injected
+kext writes ([debugging-refusals.md](../docs/guides/debugging-refusals.md#where-to-look)).
+`kernel-log.txt` keeps the kernel's own lines that name Graft or a given kext,
+such as a failed load. The script reads them with `/usr/bin/log`, since the
+guest's login shell, zsh, has a `log` builtin of its own, and fails the run when
+it cannot read them.
+
+[tests/kexts/](../tests/kexts/README.md) describes the test kexts.
