@@ -23,3 +23,7 @@ __ZN6OSKext24copyAllKextPersonalitiesEb         route  one catalogue-send entry
 __ZN6OSKext33sendAllKextPersonalitiesToCatalogEb route  the other catalogue-send entry
 _OSKextLoadKextWithIdentifier                   link   load a System-KC library
 _gOSKextUnresolved                              solve  where an absent weak import binds
+
+# Graft: what it reads a consumer's provider matching with, from its manifest.
+__Z16OSUnserializeXMLPKcPP8OSString             link   parse the matching dictionary
+__ZN12OSDictionary14iterateObjectsEPvPFbS0_PK8OSSymbolP8OSObjectE link   visit each personality
