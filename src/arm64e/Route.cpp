@@ -305,7 +305,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
     // segments, so a client that passes a data pointer refuses here rather than
     // panicking when AMFI's dispatch first branches to the shadow slot. The
     // firmware places the client in the Auxiliary collection and names its image
-    // by bundle identifier, as it names the consumer's (placedBase). A
+    // by bundle identifier, as it names each kext it places (placedBase). A
     // replacement is a signed function pointer, so its stripped address is
     // compared. A client the firmware names no image for is left unchecked, as
     // on x86-64.

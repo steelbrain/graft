@@ -46,6 +46,8 @@ OUT = ROOT / "build/boot-core"
 GRAFT = ROOT / "build/Graft.kext"
 # Apple's NVRAM variable GUID, which holds boot-args and csr-active-config.
 APPLE_NVRAM_GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
+# The hello consumer's bundle identifier, under which Graft reports its bind.
+HELLO_CONSUMER = "ai.aneesiqbal.graft.HelloConsumer"
 SSH_UP_TIMEOUT = 480
 
 
@@ -386,7 +388,7 @@ class Clone:
             consumer_done = (
                 not consumer
                 or state.get("GraftHelloConsumerState", "").startswith(("passed", "refused"))
-                or state.get("GraftClient.ai.aneesiqbal.ReimsGraphics", "").startswith("refused")
+                or state.get(f"GraftClient.{HELLO_CONSUMER}", "").startswith("refused")
             )
             if routes_done and consumer_done:
                 break
@@ -421,7 +423,7 @@ def main() -> None:
     )
     consumer = fixture(
         args.hello_consumer,
-        "ai.aneesiqbal.ReimsGraphics",
+        HELLO_CONSUMER,
         "GraftHelloConsumer.kext",
         "the hello consumer must be GraftHelloConsumer.kext",
     )
@@ -484,7 +486,7 @@ def main() -> None:
             raise RuntimeError("core probe did not pass")
         if consumer and (
             state.get("GraftHelloConsumerState") != "passed"
-            or not state.get("GraftClient.ai.aneesiqbal.ReimsGraphics", "").startswith("bound:")
+            or not state.get(f"GraftClient.{HELLO_CONSUMER}", "").startswith("bound:")
         ):
             raise RuntimeError("hello consumer did not pass")
         if "System Integrity Protection status: enabled." not in guest.stdout:

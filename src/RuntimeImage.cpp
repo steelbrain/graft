@@ -89,7 +89,7 @@ bool RuntimeImage::openEntryDefining(const mach_header_64 *collection, const cha
                                      uint64_t bias) {
     const mach_header_64 *match = nullptr;
     bool twice = false;
-    macho::eachFilesetEntry(collection, [&](uint64_t vmaddr) {
+    macho::eachFilesetEntry(collection, [&](uint64_t vmaddr, const char *) {
         auto mh = macho::header(reinterpret_cast<const void *>(vmaddr));
         macho::SymbolTable table;
         if (!mh || !mapSymbols(mh, table))

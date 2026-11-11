@@ -36,15 +36,15 @@ the kernel start the kext on every boot, even one with no consumer present.
 The arm64e Graft also lists IOMobileGraphicsFamily in its `OSBundleLibraries`
 ([Start and binding on arm64e](#start-and-binding-on-arm64e)).
 
-Graft serves two kinds of kexts, and names exactly one of each in
-`src/Policy.h`:
+Graft serves two kinds of kexts:
 
 - An **owned client** calls Graft's interface, declared in
   [sdk/include/graft/Graft.h](../sdk/include/graft/Graft.h). RgfxGate is the
-  owned client.
+  owned client, the one `src/Policy.h` names.
 - A **bound consumer** derives from classes, or calls functions, in libraries
-  of the System collection. Graft binds it by symbol name. ReimsGraphics is the
-  bound consumer.
+  of the System collection. Graft binds it by symbol name. Graft binds every
+  placed kext that carries a manifest, any number of them, and holds no
+  consumer's identity. ReimsGraphics is one.
 
 ## Start
 
@@ -58,20 +58,25 @@ any other driver. In order, it:
    compares the table's value for `_IOLog` with the address the kernel's
    linker gave Graft's own `IOLog` import;
 3. prepares its kernel writes and its routes;
-4. installs its binding trigger. On x86-64 it routes the kernel's two
+4. finds the bound consumers: each kext placed at boot whose
+   `__DATA,__graft` section starts with the manifest's magic. On x86-64 it
+   looks through the Boot collection's fileset entries, and on arm64e through
+   the device-tree nodes the firmware publishes for the kexts it places. It
+   logs each consumer it finds, or that there is none;
+5. installs its binding trigger. On x86-64 it routes the kernel's two
    catalogue entry points, `OSKext::sendAllKextPersonalitiesToCatalog` and
    `OSKext::copyAllKextPersonalities`, so that every later catalogue send gives
    it a chance to bind. On arm64e there is no trigger;
-5. marks itself active, so the owned client may call it, and makes a first
-   attempt to bind.
+6. marks itself active, so the owned client may call it, and makes a first
+   attempt to bind each consumer.
 
 If a step fails, Graft records why in its state, stops there and returns
 success to the kernel, so the boot goes on without it.
 
 ## Reading kernel images
 
-Graft reads Mach-O images in memory: the kernel, the consumer, and each
-System-collection library the consumer imports from. It walks their load
+Graft reads Mach-O images in memory: the kernel, the consumers, and each
+System-collection library a consumer imports from. It walks their load
 commands, finds their fileset entries, and copies their symbol tables before
 using them. It refuses an image whose load commands exceed 64 KiB.
 
@@ -197,11 +202,13 @@ construct it until Graft opens the gate. Its build, through
 [sdk/](../sdk/README.md), records what it needs in a `__DATA,__graft` section,
 the manifest.
 
-On x86-64, Graft tries to bind at each catalogue send until it succeeds or
-refuses. On arm64e, it tries once, at start. Each attempt runs these steps:
+Graft binds each consumer it found at start on its own. On x86-64, it tries to
+bind each one at each catalogue send until it succeeds or refuses. On arm64e,
+it tries once, at start. One consumer waiting or refused leaves the others as
+they are. Each attempt runs these steps:
 
-1. **Find the consumer.** No injected consumer means waiting. A consumer that
-   is already running is refused, since Graft binds only a dormant one.
+1. **Check the consumer is dormant.** A consumer that is already running is
+   refused, since Graft binds only a dormant one.
 2. **Read the manifest** and validate every table in it. Then parse its
    provider matching with `OSUnserializeXML`: one dictionary per personality,
    which must name an `IOProviderClass`, that matches the personality's
@@ -286,7 +293,8 @@ Binding follows the same steps, with these differences:
 
 - A provider is its fileset entry in the Boot collection. Graft neither asks
   the kernel to load it nor waits for it to start.
-- The consumer is found through its device-tree node.
+- Graft finds the consumers among the children of `/chosen/ambrosia`, the
+  device-tree nodes the firmware publishes for the kexts it places.
 - The firmware places each segment of the consumer separately, by name, so
   Graft maps every offset in the manifest through the consumer's segment
   table.
@@ -316,14 +324,17 @@ state on the IORegistry root, where `ioreg -l` shows it:
 | `GraftState` | `starting`, `active` or `refused` |
 | `GraftReason` | why Graft is in that state |
 | `GraftLog` | the most recent 8 KiB of Graft's log |
-| `GraftClient.<bundle id>` | one per served kext, as the string `<state>: <reason>` |
+| `GraftClient.<bundle id>` | one per served kext, each bound consumer under its own bundle identifier, as the string `<state>: <reason>` |
 
 A bound consumer's state is `waiting`, `bound` or `refused`. A bound
 consumer's reason also says whether the gate is open yet, naming the
-personality whose provider opened it, or still waiting for a provider. The owned client's state is `routed` or `refused` after routing,
+personality whose provider opened it, or still waiting for a provider.
+The owned client's state is `routed` or `refused` after routing,
 `refused` after a failed symbol lookup, or whatever it last set with
-`graft_client_state`. [guides/debugging-refusals.md](guides/debugging-refusals.md)
-lists every reason.
+`graft_client_state`. A placed consumer Graft did not find at start has no
+entry; the log names each one it found.
+[guides/debugging-refusals.md](guides/debugging-refusals.md) lists every
+reason.
 
 ## The architecture boundary
 

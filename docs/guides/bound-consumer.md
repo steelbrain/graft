@@ -7,11 +7,10 @@ it by symbol name at boot. This guide builds one, using
 [examples/hello-consumer](../../examples/hello-consumer/README.md) as the
 running example.
 
-Graft binds one consumer, the bundle identifier `src/Policy.h` names:
-`ai.aneesiqbal.ReimsGraphics`. The example carries that identifier so the
-released Graft binds it. To bind a kext with another identifier, change
-`ConsumerIdentifier` in `src/Policy.h` and build Graft yourself. Its
-personalities may match any provider.
+Graft binds every consumer placed at boot, whatever its bundle identifier: a
+kext declares itself a bound consumer by the manifest its build writes, and its
+personalities may match any provider. The example's identifier is its own,
+`ai.aneesiqbal.graft.HelloConsumer`.
 
 ## What you need
 
@@ -73,7 +72,7 @@ running release does not define it, Graft binds it so that
 
 Write `src/Info.plist` as an ordinary kext's:
 
-- `CFBundleIdentifier` is the identifier Graft binds;
+- `CFBundleIdentifier` is the kext's own, under which Graft reports its bind;
 - each personality names its provider's class in `IOProviderClass` and
   matches the provider as any personality does, such as the example's
   `IOPCIDevice` with `IOPCIPrimaryMatch`;
@@ -171,16 +170,14 @@ ioreg -l -d 1 | grep Graft
 A bound consumer whose provider is present reads:
 
 ```
-"GraftClient.ai.aneesiqbal.ReimsGraphics" = "bound: imports and vtables committed; activation gate open on a provider of personality GraftHelloConsumer"
+"GraftClient.ai.aneesiqbal.graft.HelloConsumer" = "bound: imports and vtables committed; activation gate open on a provider of personality GraftHelloConsumer"
 ```
 
 The kernel then constructs and starts it. Until a nub that one of the
 consumer's personalities matches is published, the reason ends
 `waiting for a provider of personality GraftHelloConsumer to open the gate`
-instead. The example also
-publishes its own
-`GraftHelloConsumerState`, `passed` when both of its bound calls into
-IOGraphicsFamily returned success.
+instead. The example also publishes its own `GraftHelloConsumerState`,
+`passed` when both of its bound calls into IOGraphicsFamily returned success.
 
 The consumer's state may also read:
 
@@ -189,3 +186,7 @@ The consumer's state may also read:
   in boot.
 - `refused`, with the reason: Graft will not bind this consumer on this
   boot. [debugging-refusals.md](debugging-refusals.md) explains each reason.
+
+A consumer with no `GraftClient` entry at all was not found at start: Graft's
+log names each consumer it found
+([debugging-refusals.md](debugging-refusals.md#a-bound-consumer)).

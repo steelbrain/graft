@@ -11,10 +11,11 @@ This page says what sets the two apart and how each goes into a boot image.
 The guides take you through the steps, and [design.md](design.md) explains
 what Graft does with each kext at boot.
 
-Graft serves one kext of each kind, named in `src/Policy.h`. It serves calls
-that pass the owned client's identifier, `ai.aneesiqbal.RgfxGate`, and binds
-the consumer `ai.aneesiqbal.ReimsGraphics`, whose personalities may match any
-provider. Serving another kext means changing `src/Policy.h` and rebuilding
+Graft binds every bound consumer placed at boot, whatever its bundle
+identifier: a kext declares itself one by the manifest it carries, and its
+personalities may match any provider. Graft serves calls that pass the owned
+client's identifier, `ai.aneesiqbal.RgfxGate`, which `src/Policy.h` names.
+Serving another owned client means changing `src/Policy.h` and rebuilding
 Graft.
 
 Everything a kext builds with is in [sdk/](../sdk/README.md). Another

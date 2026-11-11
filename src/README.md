@@ -9,8 +9,9 @@ This README maps the files and follows a boot through them.
 and [docs/manifest.md](../docs/manifest.md) specifies what a consumer embeds.
 
 The code is C++17 for the kernel: no exceptions, no RTTI, no standard library.
-Types are PascalCase, functions and variables camelCase. The identities Graft
-serves are in one place, [Policy.h](Policy.h).
+Types are PascalCase, functions and variables camelCase. The owned client's
+identity is in one place, [Policy.h](Policy.h); Graft holds no bound
+consumer's.
 
 ## The boot, end to end
 
@@ -27,8 +28,9 @@ records why, stops, and returns success so the guest keeps booting.
    Mach-O reader is [MachO.h](MachO.h).
 3. **Write path and routes.** The architecture's `KernelWrite.cpp` prepares
    kernel writes and its `Route.cpp` prepares routing.
-4. **Binding trigger.** `initializeBinding`
-   ([KernelBinding.cpp](KernelBinding.cpp)) installs the architecture's
+4. **Consumers and binding trigger.** `initializeBinding`
+   ([KernelBinding.cpp](KernelBinding.cpp)) finds the bound consumers, each
+   placed kext that carries a manifest, and installs the architecture's
    trigger ([BindingPlacement.h](BindingPlacement.h)). On x86-64 it routes the
    kernel's two catalogue entry points, so that each later catalogue send calls
    Graft back. On arm64e there is no trigger: the boot firmware placed every
@@ -38,7 +40,7 @@ records why, stops, and returns success so the guest keeps booting.
 
 After that:
 
-- **On x86-64, each catalogue send** calls `bindConsumers`, which tries the
+- **On x86-64, each catalogue send** calls `bindConsumers`, which tries each
   dormant consumer's bind again until it succeeds or is refused. On arm64e the
   first attempt binds against the images already in place.
 - **The owned client** calls the C interface in
@@ -53,8 +55,8 @@ After that:
   `Graft` IOService, and the `extern "C"` functions clients call. The three
   that act on the kernel require Graft to be active and the owned client's
   identifier; the log and state calls check only the identifier.
-- [Policy.h](Policy.h): the consumer Graft binds, the owned client it serves,
-  AMFI's bundle identifier, whose policy the arm64e routes shadow, and the
+- [Policy.h](Policy.h): the owned client Graft serves, AMFI's bundle
+  identifier, whose policy the arm64e routes shadow, and the
   route limits: at most six routes in one call, and eight route slots on
   x86-64.
 
@@ -106,17 +108,21 @@ After that:
   implements it.
 - [KernelBinding.h](KernelBinding.h), [KernelBinding.cpp](KernelBinding.cpp):
   the binding, architecture-neutral
-  ([docs/design.md](../docs/design.md#binding-a-consumer)). `attemptBind` runs
-  named stages: open the manifest, verify the providers and class layouts,
+  ([docs/design.md](../docs/design.md#binding-a-consumer)). `findConsumers`
+  keeps a record for each placed kext whose `__DATA,__graft` starts with the
+  manifest's magic, and each record holds that consumer's state and gate.
+  `attemptBind` runs named stages for one consumer: open the manifest, verify the providers and class layouts,
   parse its provider matching, plan the import and vtable writes, build any
   synthesized vtable, check each write's target and commit the writes, and
   open the consumer's activation gate on every nub a personality's provider
   matching matches, present or published later. A refusal at any stage leaves
   the consumer unbound.
 - [BindingPlacement.h](BindingPlacement.h): how the binding finds the images it
-  works on: install the trigger, locate a provider by bundle identifier, find
-  a placed kext such as the consumer, and ask whether a kext has started. It also says where in the
-  consumer a write may land. Each architecture implements it.
+  works on: install the trigger, locate a provider by bundle identifier, visit
+  every placed kext so the binding can find the consumers among them, and ask
+  whether a kext has started. It also says where in the consumer a write may
+  land. Each architecture implements it, and arm64e also finds one placed kext
+  by bundle identifier, for its route.
 
 ### The x86-64 layer
 
@@ -133,9 +139,10 @@ After that:
   clears `CR0.WP` with the other CPUs stopped and serializes instruction
   fetch.
 - [x86_64/BindingPlacement.cpp](x86_64/BindingPlacement.cpp): routes the two
-  catalogue entry points, and finds a provider through `OSKext` (registered and
+  catalogue entry points, finds a provider through `OSKext` (registered and
   started) and the live collection's fileset, with the pageable collection as
-  a fallback. A write may land anywhere the consumer maps readable, its
+  a fallback, and visits the Boot collection's fileset entries for the
+  consumers. A write may land anywhere the consumer maps readable, its
   `__TEXT` included, since the write window lifts write protection.
 
 ### The arm64e layer
@@ -154,11 +161,11 @@ After that:
   writable `mac_policy_list` element that held AMFI's conf at the copy. The
   repoint is one atomic compare-and-exchange, which refuses if the element no
   longer holds AMFI's conf. The client's image, which the replacements must lie
-  in, is found as the consumer's is (`placedBase`). Arm64Route.h is the plan, which the host tests
+  in, is found through its device-tree node (`placedBase`). Arm64Route.h is the plan, which the host tests
   run; Route.cpp does the live reads and the swap.
 - [arm64e/BindingPlacement.cpp](arm64e/BindingPlacement.cpp): no trigger to
   install. A provider is its fileset entry in the Boot collection, and the
-  consumer is found through its device-tree node. Nothing waits for a kext to
+  consumers are found among the device-tree nodes of the placed kexts. Nothing waits for a kext to
   start. A write may land only in a writable data segment that the kernel has
   not locked read-only.
 - [arm64e/Fixup.h](arm64e/Fixup.h): an import site's new value. Each site holds
@@ -193,8 +200,9 @@ directory:
   [KernelWrite.h](KernelWrite.h));
 - how a client's kernel functions are routed (`Route.cpp`, behind
   [Route.h](Route.h));
-- how the binding finds its images: the trigger, the providers, the consumer
-  and the started check, and where a bound write may land
+- how the binding finds its images: the trigger, the providers, the placed
+  kexts the consumers are found among and the started check, and where a bound
+  write may land
   (`BindingPlacement.cpp`, behind [BindingPlacement.h](BindingPlacement.h));
 - how an import site's new value is built (`Fixup.h`, behind
   [Fixup.h](Fixup.h), with the shared arithmetic in
@@ -225,8 +233,10 @@ following from the firmware:
   of the Boot kernel collection's Mach-O header.
 - **`/chosen/ambrosia/<bundle id>`, property `base`.** One node per placed
   kext, named by its bundle identifier. 8 bytes: the slid address of the
-  kext's Mach-O header. Graft reads the consumer's, to bind it, and the owned
-  client's, to check that its route replacements lie in its code.
+  kext's Mach-O header. Graft reads each one at start and binds, as a
+  consumer, each kext whose image carries a manifest. It reads the owned
+  client's to check that its route replacements lie in its code. The other
+  children of `/chosen/ambrosia`, such as `vtable-disc`, have no `base`.
 - **`/chosen/ambrosia/vtable-disc`.** One child node per vtable a synthesized
   class needs ([docs/guides/synthesized-class.md](../docs/guides/synthesized-class.md)),
   with these properties:

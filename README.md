@@ -20,18 +20,19 @@ IORegistry, and the guest keeps booting.
 
 ## Who Graft serves
 
-Graft serves two kexts, named in [src/Policy.h](src/Policy.h): the bound
-consumer `ai.aneesiqbal.ReimsGraphics` and the owned client
-`ai.aneesiqbal.RgfxGate`. These are the guest drivers of
+Graft binds every bound consumer placed at boot, any kext that carries the
+manifest the SDK writes, such as `ai.aneesiqbal.ReimsGraphics`, and serves the
+owned client [src/Policy.h](src/Policy.h) names, `ai.aneesiqbal.RgfxGate`.
+These are the guest drivers of
 reims-vgpu, a paravirtual GPU for macOS virtual machines: ReimsGraphics is its
 display and Metal driver, and RgfxGate installs its Metal bundle. Graft
 replaces Lilu for them.
 
-Graft has no plugin interface. Serving another kext means changing
-`src/Policy.h` and rebuilding Graft. A consumer's personalities may match any
-provider: Graft opens the gate on the nubs they match. The
-[examples](examples/README.md) carry the two pinned identities for that
-reason.
+Graft has no plugin interface. A bound consumer needs no change to Graft: it
+declares itself by its manifest, and its personalities may match any provider,
+whose nubs Graft opens the gate on. Serving another owned client means changing
+`src/Policy.h` and rebuilding Graft, which is why the client
+[example](examples/README.md) passes the pinned identity.
 
 ## Status
 

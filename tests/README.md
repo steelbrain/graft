@@ -39,7 +39,7 @@ later with only its standard library.
 
 | test | covers |
 |---|---|
-| `macho_test.cpp` | the Mach-O reader: duplicate-aware symbol lookup, malformed and truncated load commands, `__LINKEDIT` bounds, symbol-table snapshots, and a real dylib built from `fixture.c` |
+| `macho_test.cpp` | the Mach-O reader: duplicate-aware symbol lookup, malformed and truncated load commands, fileset entries and their identifiers, which Graft finds the x86-64 consumers by, `__LINKEDIT` bounds, symbol-table snapshots, and a real dylib built from `fixture.c` |
 | `binding_test.cpp` | pointer and branch fixup arithmetic, the whole-plan checks on import sites (bounds, order, missing and ambiguous symbols), and the class size and vtable length comparison |
 | `manifest_test.cpp` | manifest validation, including the versions it reads and the provider matching string, import resolution with candidates and fallbacks, weak imports through the plan and the target check, provider anchors, vtable planning, and a manifest section read back from a linked kext |
 | `x86_route_test.cpp` | x86-64 instruction decoding and route building, with 20,000 generated instruction streams, refusal of unsupported forms, and routes run on the host |

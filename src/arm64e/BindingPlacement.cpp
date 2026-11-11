@@ -5,9 +5,9 @@
 // libkern/IOKit base classes) stay in the Boot collection openKernel holds, so a
 // provider is still its fileset entry there; this placement uses no OSKext and no
 // started gating, since a placed entry is already present. The kexts Graft serves,
-// the consumer and the owned client, land in the Auxiliary collection instead, so
-// each is read by bundle identifier from the boot firmware's per-kext device-tree
-// node.
+// the consumers and the owned client, land in the Auxiliary collection instead,
+// so each is read from the boot firmware's per-kext device-tree node, named by
+// its bundle identifier.
 #include "BindingPlacement.h"
 #include "MachO.h"
 #include <IOKit/IODeviceTreeSupport.h>
@@ -39,9 +39,37 @@ bool kextStarted(const char *) {
     return false;
 }
 
-uint64_t placedBase(const mach_header_64 *, const char *identifier) {
+namespace {
+// A placed kext's slid mach_header, its device-tree node's 8-byte base; 0 for a
+// node with none, such as vtable-disc.
+uint64_t nodeBase(IORegistryEntry *node) {
+    uint64_t base = 0;
+    auto data = OSDynamicCast(OSData, node->getProperty("base"));
+    if (data && data->getLength() == sizeof(base))
+        memcpy(&base, data->getBytesNoCopy(), sizeof(base));
+    return base;
+}
+} // namespace
+
+void eachPlacedKext(const mach_header_64 *,
+                    void (*visit)(void *context, const char *identifier, uint64_t base),
+                    void *context) {
     // The boot firmware names each placed kext's device-tree node by its
     // CFBundleIdentifier under /chosen/ambrosia, with base the slid mach_header.
+    auto root = IORegistryEntry::fromPath("/chosen/ambrosia", gIODTPlane);
+    auto children = root ? root->getChildIterator(gIODTPlane) : nullptr;
+    while (auto child =
+                   children ? OSDynamicCast(IORegistryEntry, children->getNextObject()) : nullptr) {
+        uint64_t base = nodeBase(child);
+        auto name = child->getName(gIODTPlane);
+        if (base && name)
+            visit(context, name, base);
+    }
+    OSSafeReleaseNULL(children);
+    OSSafeReleaseNULL(root);
+}
+
+uint64_t placedBase(const mach_header_64 *, const char *identifier) {
     char path[192];
     if (snprintf(path, sizeof(path), "/chosen/ambrosia/%s", identifier) >=
         static_cast<int>(sizeof(path)))
@@ -49,10 +77,7 @@ uint64_t placedBase(const mach_header_64 *, const char *identifier) {
     auto node = IORegistryEntry::fromPath(path, gIODTPlane);
     if (!node)
         return 0;
-    uint64_t base = 0;
-    auto data = OSDynamicCast(OSData, node->getProperty("base"));
-    if (data && data->getLength() == sizeof(base))
-        memcpy(&base, data->getBytesNoCopy(), sizeof(base));
+    uint64_t base = nodeBase(node);
     node->release();
     return base;
 }

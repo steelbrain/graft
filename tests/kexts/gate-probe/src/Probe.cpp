@@ -60,5 +60,5 @@ extern "C" kern_return_t probe_stop(kmod_info_t *, void *) {
     return KERN_FAILURE;
 }
 extern "C" {
-KMOD_EXPLICIT_DECL(ai.aneesiqbal.ReimsGraphics, "1.0.0", probe_start, probe_stop)
+KMOD_EXPLICIT_DECL(ai.aneesiqbal.graft.GateProbe, "1.0.0", probe_start, probe_stop)
 }

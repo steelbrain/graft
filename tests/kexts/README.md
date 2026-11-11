@@ -50,8 +50,9 @@ It runs on an arm64e boot, not under boot-core.py, which boots x86-64.
 several `IOMatchCategory` values on one device nub. Graft sets one gate property
 on the nub, and every gated personality matches together; each started
 personality also exercises a bound import, so a started category proves the bind
-landed, not just that the personality matched. Its bundle identifier is
-`ai.aneesiqbal.ReimsGraphics`, the one Graft binds (`src/Policy.h`).
+landed, not just that the personality matched. Its bundle identifier is its own,
+`ai.aneesiqbal.graft.GateProbe`: Graft binds every placed kext that carries a
+manifest.
 
 It is a consumer, so it is built through the SDK with its own Makefile:
 

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR LGPL-3.0-or-later
-// The catalogue binding (docs/design.md, "Binding a consumer"). It routes the
-// two catalogue entries and, on each send, binds the dormant consumer against
+// The catalogue binding (docs/design.md, "Binding a consumer"). At start it finds
+// the bound consumers, each placed kext that carries a manifest. It routes the
+// two catalogue entries and, on each send, binds each dormant consumer against
 // the live System KC by name: it opens the consumer's manifest, retains and
 // verifies its providers, checks each class's live layout, stages and commits
 // its import and vtable writes, then opens its activation gate so the deferred
-// match starts it. Every stage fails safe and never half-binds. The manifest
-// format is docs/manifest.md.
+// match starts it. Every stage fails safe and never half-binds, and each consumer
+// binds or is refused on its own. The manifest format is docs/manifest.md.
 #include "KernelBinding.h"
 #include "BindingPlacement.h"
 #include "Consumer.h"
 #include "KernelWrite.h"
 #include "Log.h"
 #include "Memory.h"
-#include "Policy.h"
 #include "Resolve.h"
 #include "Vtable.h"
 #include "arm64e/Synthesize.h"
@@ -25,29 +25,50 @@
 #include <libkern/c++/OSString.h>
 #include <libkern/c++/OSSymbol.h>
 #include <libkern/c++/OSUnserialize.h>
+#include <mach/kmod.h>
 #include <mach/vm_prot.h>
 
 namespace graft {
 namespace {
-constexpr const char *ClientId = policy::ConsumerIdentifier;
 const RuntimeImage *kernel;
 const mach_header_64 *bootCollection;
 uint32_t busy;
 uint32_t pending;
-bool finished;
-char lastState[32], lastReason[320];
 struct LibraryState {
     RuntimeImage image;
     OSObject *hold;
 };
-LibraryState *retainedLibraries;
 
-void report(const char *state, const char *reason) {
-    if (!strcmp(lastState, state) && !strcmp(lastReason, reason))
+// One bound consumer: a placed kext that carries a manifest, found at start
+// (findConsumers). Each has its own bind, state and activation gate, so one
+// consumer's refusal leaves the others as they are.
+struct Consumer {
+    char identifier[KMOD_MAX_NAME];
+    uint64_t base;
+    // Bound or refused: no later trigger retries it.
+    bool finished;
+    // The state last published as GraftClient.<identifier>.
+    char lastState[32], lastReason[320];
+    // The activation gate (openGate): the key, copied so the published-nub handler
+    // can run after the bind pass returns; the provider matching, kept for the
+    // life of the kext, since its keys name the personalities the handler
+    // reports; and whether a nub has opened the gate yet.
+    char gateKey[manifest::MaxGateLength + 1];
+    OSDictionary *matching;
+    uint32_t gateOpened;
+    // The provider holds kept for the rest of the boot once writes may be in
+    // place (attemptBind).
+    LibraryState *retainedLibraries;
+};
+Consumer *consumers;
+size_t consumerCount;
+
+void report(Consumer &consumer, const char *state, const char *reason) {
+    if (!strcmp(consumer.lastState, state) && !strcmp(consumer.lastReason, reason))
         return;
-    strlcpy(lastState, state, sizeof(lastState));
-    strlcpy(lastReason, reason, sizeof(lastReason));
-    clientState(ClientId, state, reason);
+    strlcpy(consumer.lastState, state, sizeof(consumer.lastState));
+    strlcpy(consumer.lastReason, reason, sizeof(consumer.lastReason));
+    clientState(consumer.identifier, state, reason);
 }
 
 const OSMetaClass *metaClass(const char *name) {
@@ -213,19 +234,83 @@ bool validSites(const manifest::View &view, const RuntimeImage &consumer, uint64
     return true;
 }
 
-// Map the dormant consumer at the address placedBase found and open the
-// manifest it carries in __DATA,__graft. A missing section and a malformed
-// manifest both leave the view invalid and return false. sectionStart is the
-// section's runtime address, so the caller can keep writes out of it.
+// Map the placed kext at base and find its __DATA,__graft section: its runtime
+// address, 0 when the image does not map or has no such section.
+uint64_t manifestSection(uint64_t base, RuntimeImage &image, size_t &size) {
+    size = 0;
+    return image.map(reinterpret_cast<const mach_header_64 *>(base))
+                   ? image.section("__DATA", "__graft", size)
+                   : 0;
+}
+
+// Map the dormant consumer at base and open the manifest it carries in
+// __DATA,__graft. A missing section and a malformed manifest both leave the view
+// invalid and return false. sectionStart is the section's runtime address, so
+// the caller can keep writes out of it.
 bool openManifest(uint64_t base, RuntimeImage &consumer, manifest::View &view,
                   uint64_t &sectionStart) {
     size_t sectionSize = 0;
-    sectionStart = consumer.map(reinterpret_cast<const mach_header_64 *>(base))
-                           ? consumer.section("__DATA", "__graft", sectionSize)
-                           : 0;
+    sectionStart = manifestSection(base, consumer, sectionSize);
     return sectionStart &&
            manifest::open(reinterpret_cast<const void *>(sectionStart), sectionSize, view).error ==
                    manifest::Error::None;
+}
+
+// Whether the placed kext at base carries a consumer manifest: a __DATA,__graft
+// section that starts with the manifest's magic. Graft itself and an owned client
+// carry none. The manifest is validated whole when the consumer is bound.
+bool carriesManifest(uint64_t base) {
+    RuntimeImage image;
+    size_t size = 0;
+    uint64_t start = manifestSection(base, image, size);
+    uint32_t magic = 0;
+    if (start && size >= sizeof(magic))
+        memcpy(&magic, reinterpret_cast<const void *>(start), sizeof(magic));
+    return magic == manifest::Magic;
+}
+
+// The bound consumers' discovery: a count, then, with records, each consumer
+// recorded until capacity. An identifier longer than a kext's bundle identifier
+// can be is no kext's.
+struct Discovery {
+    Consumer *records;
+    size_t capacity, count;
+};
+void discovered(void *context, const char *identifier, uint64_t base) {
+    auto discovery = static_cast<Discovery *>(context);
+    if (!identifier || strlen(identifier) >= KMOD_MAX_NAME || !carriesManifest(base))
+        return;
+    if (discovery->records) {
+        if (discovery->count == discovery->capacity)
+            return;
+        Consumer &consumer = discovery->records[discovery->count];
+        strlcpy(consumer.identifier, identifier, sizeof(consumer.identifier));
+        consumer.base = base;
+        note("binding: found bound consumer %s", identifier);
+    }
+    ++discovery->count;
+}
+
+// Find the bound consumers, once, at start: each placed kext that carries a
+// manifest (BindingPlacement.h). Every kext Graft can bind is in place by then:
+// on x86-64 the Boot collection is fixed before the kernel starts, and on arm64
+// the boot firmware placed each kext and published its node. Graft holds no
+// consumer's identity: a consumer declares itself by its manifest.
+void findConsumers() {
+    Discovery discovery{};
+    eachPlacedKext(bootCollection, discovered, &discovery);
+    if (!discovery.count) {
+        note("binding: no bound consumer is placed");
+        return;
+    }
+    discovery = {allocateArray<Consumer>(discovery.count), discovery.count, 0};
+    if (!discovery.records) {
+        note("binding: cannot allocate %zu bound consumers' records", discovery.capacity);
+        return;
+    }
+    eachPlacedKext(bootCollection, discovered, &discovery);
+    consumers = discovery.records;
+    consumerCount = discovery.count;
 }
 
 // The write-plan capacity: one write per import site, each declared vtable's
@@ -950,13 +1035,9 @@ OSDictionary *providerMatching(const manifest::View &view, char *reason, size_t 
 // unlike an IOResourceMatch (which gates only start(), after the base
 // constructors have already run through the bound slots) it holds the consumer
 // dormant until Graft sets the property on its provider nub and re-registers it.
-// The gate key, copied here, and the provider matching, kept for the life of the
-// kext (its keys name the personalities), let the published-nub handler run
-// after the bind pass returns.
-char gateKey[manifest::MaxGateLength + 1];
-OSDictionary *gateMatching;
-uint32_t gateOpened;
-
+// The consumer's record holds what the published-nub handler needs after the
+// bind pass returns.
+//
 // A nub that a personality's provider matching matches: set the gate property on
 // it and re-register it, so its deferred match now starts the consumer with its
 // slots and vtable bound. addMatchingNotification delivers every current match
@@ -968,19 +1049,21 @@ uint32_t gateOpened;
 // notification, so each personality's handler sees each nub once. A nub that
 // another of the consumer's personalities already opened is left alone: its
 // re-registration matches every personality. The first nub reports the gate
-// open, naming the personality (refCon); later nubs only set the property.
-bool gatePublished(void *, void *personality, IOService *nub, IONotifier *) {
-    if (!nub || !gateKey[0] || nub->getProperty(gateKey) == kOSBooleanTrue)
+// open, naming the personality (refCon); later nubs only set the property. target
+// is the consumer's record.
+bool gatePublished(void *target, void *personality, IOService *nub, IONotifier *) {
+    auto &consumer = *static_cast<Consumer *>(target);
+    if (!nub || !consumer.gateKey[0] || nub->getProperty(consumer.gateKey) == kOSBooleanTrue)
         return true;
-    nub->setProperty(gateKey, kOSBooleanTrue);
+    nub->setProperty(consumer.gateKey, kOSBooleanTrue);
     nub->registerService();
-    if (!__atomic_exchange_n(&gateOpened, 1u, __ATOMIC_ACQ_REL)) {
+    if (!__atomic_exchange_n(&consumer.gateOpened, 1u, __ATOMIC_ACQ_REL)) {
         char reason[320];
         snprintf(reason, sizeof(reason),
                  "imports and vtables committed; activation gate open on a provider of "
                  "personality %s",
                  static_cast<const OSSymbol *>(personality)->getCStringNoCopy());
-        report("bound", reason);
+        report(consumer, "bound", reason);
     }
     return true;
 }
@@ -991,9 +1074,9 @@ bool gatePublished(void *, void *personality, IOService *nub, IONotifier *) {
 // waiting for one, so the state always begins with "bound". addMatchingNotification,
 // setProperty and registerService are exported on every release, macOS 27
 // included, so one binary activates across the range.
-void openGate(const char *key, OSDictionary *matching) {
-    strlcpy(gateKey, key, sizeof(gateKey));
-    gateMatching = matching;
+void openGate(Consumer &consumer, const char *key, OSDictionary *matching) {
+    strlcpy(consumer.gateKey, key, sizeof(consumer.gateKey));
+    consumer.matching = matching;
     // Report waiting first: the handler reports the gate open, so whichever nub
     // opens it, now or on a later matching thread, writes the last state.
     struct Names {
@@ -1011,60 +1094,56 @@ void openGate(const char *key, OSDictionary *matching) {
              "imports and vtables committed; waiting for a provider of personality %s to open "
              "the gate",
              names.text);
-    report("bound", reason);
+    report(consumer, "bound", reason);
     // addMatchingNotification retains each matching dictionary and delivers its
     // existing matches synchronously before it returns; no notifier is ever
     // removed, so later-published nubs stay covered for the life of the kext.
-    matching->iterateObjects(nullptr, [](void *, const OSSymbol *name, OSObject *object) {
+    matching->iterateObjects(&consumer, [](void *target, const OSSymbol *name, OSObject *object) {
         if (!IOService::addMatchingNotification(gIOFirstPublishNotification,
                                                 OSDynamicCast(OSDictionary, object), &gatePublished,
-                                                nullptr, const_cast<OSSymbol *>(name))) {
+                                                target, const_cast<OSSymbol *>(name))) {
             char reason[320];
             snprintf(reason, sizeof(reason),
                      "imports and vtables committed; cannot watch for a provider of personality %s",
                      name->getCStringNoCopy());
-            report("bound", reason);
+            report(*static_cast<Consumer *>(target), "bound", reason);
         }
         return false;
     });
 }
 
-// Bind the dormant consumer: open its manifest, verify its providers and
-// class layouts, stage and commit its import and vtable writes, then open its
+// Bind one dormant consumer: open its manifest, verify its providers and class
+// layouts, stage and commit its import and vtable writes, then open its
 // activation gate so the deferred match starts it. Each stage fails safe,
 // setting the consumer's registry state to waiting (retry on a later send) or
-// refused, and never half-binds.
-void attemptBind() {
-    uint64_t base = placedBase(bootCollection, ClientId);
-    if (!base) {
-        report("waiting", "no consumer injected");
-        return;
-    }
+// refused, and never half-binds. Nothing here touches another consumer's record.
+void attemptBind(Consumer &record) {
+    uint64_t base = record.base;
     RuntimeImage consumer;
     manifest::View view;
     uint64_t manifestStart = 0;
     if (!openManifest(base, consumer, view, manifestStart)) {
-        report("refused", "invalid consumer manifest");
-        finished = true;
+        report(record, "refused", "invalid consumer manifest");
+        record.finished = true;
         return;
     }
     const auto &h = view.header();
-    if (kextStarted(ClientId)) {
-        report("refused", "consumer started before binding");
-        finished = true;
+    if (kextStarted(record.identifier)) {
+        report(record, "refused", "consumer started before binding");
+        record.finished = true;
         return;
     }
     size_t capacity = 0;
     if (!planCapacity(view, capacity)) {
-        report("refused", "write-plan size overflow");
-        finished = true;
+        report(record, "refused", "write-plan size overflow");
+        record.finished = true;
         return;
     }
     char reason[320];
     OSDictionary *matching = providerMatching(view, reason, sizeof(reason));
     if (!matching) {
-        report("refused", reason);
-        finished = true;
+        report(record, "refused", reason);
+        record.finished = true;
         return;
     }
     auto states = allocateArray<LibraryState>(h.libraries.count);
@@ -1120,9 +1199,9 @@ void attemptBind() {
         // deferred the consumer's very construction, now matches and the kernel
         // starts it with its slots and vtable bound. openGate keeps the matching
         // and reports the bound state (gate open, or waiting for a provider).
-        openGate(view.string(h.gate), matching);
+        openGate(record, view.string(h.gate), matching);
         matching = nullptr;
-        finished = true;
+        record.finished = true;
     }
     OSSafeReleaseNULL(matching);
     // Opening the gate can expose the consumer to a concurrent match. Never undo
@@ -1130,12 +1209,12 @@ void attemptBind() {
     // possibly running client. An unverified write rollback likewise requires
     // permanent provider holds.
     if (preserveBindings) {
-        retainedLibraries = states;
+        record.retainedLibraries = states;
         states = nullptr;
     }
     if (!complete) {
-        report(waiting ? "waiting" : "refused", reason);
-        finished = !waiting;
+        report(record, waiting ? "waiting" : "refused", reason);
+        record.finished = !waiting;
     }
     if (states)
         for (uint32_t i = 0; i < h.libraries.count; ++i)
@@ -1152,10 +1231,11 @@ void attemptBind() {
 
 void bindConsumers() {
     // Triggers can arrive concurrently (each catalogue send on x86-64). Only one
-    // thread runs attemptBind at a time, but a trigger that arrives while another
-    // thread holds the pass must not be dropped: it may be the send whose state
-    // lets the bind complete. Record it in pending, which the holder drains, and
-    // re-check pending after releasing busy so a trigger in that window is not lost.
+    // thread runs the pass, which retries every consumer not yet bound or refused,
+    // at a time, but a trigger that arrives while another thread holds the pass
+    // must not be dropped: it may be the send whose state lets a bind complete. Record it in
+    // pending, which the holder drains, and re-check pending after releasing busy so a trigger in
+    // that window is not lost.
     __atomic_store_n(&pending, 1, __ATOMIC_RELEASE);
     for (;;) {
         uint32_t expected = 0;
@@ -1163,8 +1243,9 @@ void bindConsumers() {
                                          __ATOMIC_RELAXED))
             return;
         while (__atomic_exchange_n(&pending, 0, __ATOMIC_ACQ_REL)) {
-            if (!finished)
-                attemptBind();
+            for (size_t i = 0; i < consumerCount; ++i)
+                if (!consumers[i].finished)
+                    attemptBind(consumers[i]);
             publishLog();
         }
         __atomic_store_n(&busy, 0, __ATOMIC_RELEASE);
@@ -1178,8 +1259,9 @@ void bindConsumers() {
 bool initializeBinding(const RuntimeImage &image, const mach_header_64 *collection) {
     kernel = &image;
     bootCollection = collection;
+    findConsumers();
     // The trigger is per-architecture (BindingPlacement.h): x86-64 routes the
-    // catalogue entry points so each send retries the bind; arm64 needs none, as
+    // catalogue entry points so each send retries the binds; arm64 needs none, as
     // every image is placed before Graft starts and the kmod-start bind is the
     // one chance. graft_start calls bindConsumers once either way.
     return installBindingTrigger(image, bindConsumers);

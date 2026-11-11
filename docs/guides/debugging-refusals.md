@@ -42,7 +42,17 @@ before anything else.
 
 ## A bound consumer
 
-A consumer's state is `waiting`, `bound` or `refused`.
+Graft finds the bound consumers once, at start, and logs `binding: found bound
+consumer <bundle id>` for each. A consumer with no `GraftClient` entry was not
+found:
+
+| log line | meaning |
+|---|---|
+| `binding: no bound consumer is placed` | no kext placed at boot carries a manifest. Check that the boot image carries the consumer as `consumer.mk` staged it, since the unstaged link has no manifest. On arm64e, check that the firmware published the consumer's device-tree node with its `base` |
+| `binding: cannot allocate <n> bound consumers' records` | Graft found `<n>` consumers but could not allocate their records, so it binds none of them on this boot |
+
+A consumer's state is `waiting`, `bound` or `refused`, and each consumer's is
+its own.
 
 `waiting` is not a failure on x86-64: Graft tries again at each catalogue
 send, and the kernel sends again as more kexts register, such as when the
@@ -51,7 +61,6 @@ still `waiting` there stays so for the boot.
 
 | waiting reason | meaning |
 |---|---|
-| `no consumer injected` | Graft found no consumer kext. Check that the boot image carries it, with the identifier `src/Policy.h` names. On arm64e, check that the firmware published the consumer's device-tree node |
 | `<library> is not registered` | x86-64: a provider library is not registered with the kernel yet |
 | `<library> is not started (load <code>)` | x86-64: a provider is registered, but loading it has not succeeded yet |
 | `cannot allocate binding resources` | Graft could not allocate the memory a bind needs, and tries again at the next catalogue send |
