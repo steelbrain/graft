@@ -342,8 +342,12 @@ import it tests with `OSKextSymbolIsResolved()`.
 
 ## What it reports
 
-Graft writes each step to the kernel log, prefixed `graft:`, and publishes its
-state on the IORegistry root, where `ioreg -l` shows it:
+Graft writes each step with `IOLog`, prefixed `graft: `, and publishes its
+state on the IORegistry root, where `ioreg -l` shows it. The unified log keeps
+the `IOLog` lines on arm64e only: on x86-64 the kernel keeps every line a kext
+OpenCore injected writes out of it
+([guides/debugging-refusals.md](guides/debugging-refusals.md#where-to-look)),
+so `GraftLog` is the record of Graft's steps on both:
 
 | property | holds |
 |---|---|

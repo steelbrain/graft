@@ -105,8 +105,14 @@ Graft publishes its state on the IORegistry root. In the guest,
 ioreg -l -d 1 | grep Graft
 ```
 
-shows `GraftState`, `GraftReason`, the recent `GraftLog`, and a
-`GraftClient.<bundle id>` entry for each kext Graft serves, as
-`<state>: <reason>`. The same lines go to the kernel log with the prefix
-`graft:`. [guides/debugging-refusals.md](guides/debugging-refusals.md) explains
-each state and reason.
+shows `GraftState`, `GraftReason`, and a `GraftClient.<bundle id>` entry for
+each kext Graft serves, as `<state>: <reason>`. It shows only the start of
+`GraftLog`, Graft's recent steps, one a line. This prints all of it:
+
+```sh
+ioreg -l -d 1 | sed -n '/"GraftLog" = /,/^"$/p'
+```
+
+On arm64e the steps are also in the unified log, prefixed `graft: `; on x86-64
+they are not. [guides/debugging-refusals.md](guides/debugging-refusals.md)
+explains each state and reason, and how to read the log.

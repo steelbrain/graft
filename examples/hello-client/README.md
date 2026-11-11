@@ -55,9 +55,12 @@ ioreg -l -d 1 | grep Graft
 ```
 
 shows `GraftClient.ai.aneesiqbal.graft.HelloClient` set to `ready: resolved
-_IOLog`. The same line, and the logged address, go to the kernel log with the
-prefix `graft:`:
+_IOLog`. The same line, and the logged address, are in Graft's log:
 
 ```sh
-log show --last boot --predicate 'process == "kernel"' | grep graft:
+ioreg -l -d 1 | sed -n '/"GraftLog" = /,/^"$/p'
 ```
+
+On arm64e they are also in the unified log, prefixed `graft: `; on x86-64 they
+are not
+([debugging-refusals.md](../../docs/guides/debugging-refusals.md#where-to-look)).

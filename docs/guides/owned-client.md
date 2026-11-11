@@ -223,12 +223,18 @@ The example reads:
 ```
 
 A client that routes reads `routed:` and the number of routes, or `refused:`
-and the route and reason. Every line also goes to the kernel log with the
-prefix `graft:`:
+and the route and reason. Graft adds each state, and each line the client
+logs with `graft_client_log`, to `GraftLog`:
 
 ```sh
-log show --last boot --predicate 'process == "kernel"' | grep graft:
+ioreg -l -d 1 | sed -n '/"GraftLog" = /,/^"$/p'
 ```
+
+On arm64e the same lines are in the unified log, prefixed `graft: `
+([debugging-refusals.md](debugging-refusals.md#where-to-look) gives the
+command); on x86-64 they are not. A line the client writes with `IOLog` itself
+is missing from the unified log on both architectures, so `graft_client_log` is
+the way to leave a line that can be read after boot.
 
 `graft_route_kernel` returns false and records nothing when Graft is not
 active or the request has no routes or more than sixteen.

@@ -6,13 +6,16 @@ shows where Graft reports, and what each reason means.
 
 ## Where to look
 
-Graft publishes its state on the IORegistry root, and writes each step to the
-kernel log with the prefix `graft:`. In the guest:
+Graft publishes its state and its log on the IORegistry root. In the guest:
 
 ```sh
 ioreg -l -d 1 | grep Graft
-log show --last boot --predicate 'process == "kernel"' | grep graft:
+ioreg -l -d 1 | sed -n '/"GraftLog" = /,/^"$/p'
 ```
+
+The first command prints each property below, but of `GraftLog` only the lines
+that contain the word `Graft`, starting with its first. The second prints all
+of `GraftLog`, one step a line.
 
 | property | holds |
 |---|---|
@@ -23,7 +26,21 @@ log show --last boot --predicate 'process == "kernel"' | grep graft:
 
 Start with `GraftState`. Graft serves nothing unless it is `active`. Then read
 the `GraftClient` entry of the kext that did not work. When a reason is not
-enough, `GraftLog` and the kernel log hold the steps before it.
+enough, `GraftLog` holds the steps before it.
+
+Graft also writes each step with `IOLog`, prefixed `graft: `. On arm64e the
+unified log keeps these lines, with the time of each:
+
+```sh
+/usr/bin/log show --last boot --predicate 'process == "kernel" AND eventMessage BEGINSWITH "graft: "'
+```
+
+That shows Graft's lines, with what each client logs through Graft, but not a
+line a client writes with `IOLog` itself. The full path matters over ssh, where
+zsh's own `log` builtin would answer instead. On x86-64 the unified log keeps
+none of these lines: the kernel there keeps every line that a kext OpenCore
+injected writes with `IOLog`, `printf` or `os_log` out of it, Graft's and its
+clients' alike. Read `GraftLog` there.
 
 ## Graft's own start
 
@@ -36,9 +53,10 @@ one of these:
 | `kernel write/routing facilities unavailable` | Graft could not prepare its kernel writes or its routes, such as when a kernel symbol they need is missing |
 | `catalogue binding routes unavailable` | Graft could not install the trigger it binds from; on x86-64 that is a route of the kernel's two catalogue entry points. When the log also says `binding: cannot allocate the consumer state lock`, Graft could not allocate the lock that orders each consumer's state |
 
-When the kernel log has `graft: refused: cannot allocate diagnostics` and the
-registry has no `GraftState`, Graft could not allocate its log and stopped
-before anything else.
+When `kmutil showloaded` lists `ai.aneesiqbal.graft` but the registry has no
+`GraftState`, Graft could not allocate its log and stopped before anything
+else. On arm64e the unified log then has `graft: refused: cannot allocate
+diagnostics`.
 
 ## A bound consumer
 
