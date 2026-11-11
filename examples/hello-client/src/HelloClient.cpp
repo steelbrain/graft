@@ -6,9 +6,8 @@
 // kext's start routine.
 //
 // Graft serves a call when its identifier names a placed kext, so a client
-// passes its own bundle identifier (here ai.aneesiqbal.graft.HelloClient). Graft
-// is pinned to no fixed name; a call whose identifier names no placed kext is
-// ignored.
+// passes its own bundle identifier (here ai.aneesiqbal.graft.HelloClient). A
+// call whose identifier names no placed kext is ignored.
 //
 // This example does the smallest useful thing: it confirms Graft is active, asks
 // for one kernel symbol by name, logs the address, and publishes its state. It

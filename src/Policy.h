@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR LGPL-3.0-or-later
 // The policy constants of Graft's generic mechanism, in one place to review.
-// Graft is not pinned to any particular kext: a client is accepted when it is a
-// placed kext (src/Start.cpp), so no client identifier is named here. What does
-// belong here is AMFI's public identifier, which the arm64e route mechanism
-// shadows (src/arm64e/Route.cpp), and the route limits the installers enforce.
+// A client is accepted when it is a placed kext (src/Start.cpp), so no kext's
+// identifier is named here but AMFI's public one, which the arm64e route
+// mechanism shadows (src/arm64e/Route.cpp). The route limits the installers
+// enforce are here too.
 #pragma once
 #include <stddef.h>
 

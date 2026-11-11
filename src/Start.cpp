@@ -5,8 +5,7 @@
 // service starts. A call's identifier is accepted when it names a placed kext
 // (placedBase), whether or not Graft is active, so a client can record that
 // Graft refused; the functions that act on the kernel additionally require Graft
-// active. Graft is not pinned to any one client's name. The
-// architecture-neutral core does the work.
+// active. The architecture-neutral core does the work.
 #include "BindingPlacement.h"
 #include "KernelBinding.h"
 #include "KernelWrite.h"
@@ -33,11 +32,11 @@ bool ready;
 
 // A call's identifier is accepted when it names a kext the boot linker placed:
 // on x86-64 a fileset entry in the Boot collection, on arm64e a device-tree node
-// the firmware wrote (graft::placedBase). Graft is not pinned to any one name,
-// and a placed identifier is what makes every GraftClient.<id> registry key name
-// a real kext. graft_start keeps the Boot collection before anything can refuse,
-// so this holds when Graft is not active too; on x86-64 it needs the collection's
-// load commands to validate, while arm64e reads the device tree instead.
+// the firmware wrote (graft::placedBase). A placed identifier is what makes
+// every GraftClient.<id> registry key name a real kext. graft_start keeps the
+// Boot collection before anything can refuse, so this holds when Graft is not
+// active too; on x86-64 it needs the collection's load commands to validate,
+// while arm64e reads the device tree instead.
 bool placedClient(const char *identifier) {
     auto collection = __atomic_load_n(&bootCollection, __ATOMIC_ACQUIRE);
     return identifier && graft::placedBase(collection, identifier) != 0;

@@ -2,10 +2,9 @@
 // Graft's interface for a client kext. Each call takes the caller's own bundle
 // identifier, and Graft serves it when that identifier names a kext the boot
 // linker placed: a fileset entry in the Boot collection on x86-64, a device-tree
-// node the firmware wrote on arm64e. Graft is pinned to no fixed name, so any
-// placed kext can be a client. Kernel and Boot-collection imports stay the boot
-// linker's work; these services act on the running kernel. docs/design.md,
-// "Owned clients", has the details.
+// node the firmware wrote on arm64e, so any placed kext can be a client. Kernel
+// and Boot-collection imports stay the boot linker's work; these services act on
+// the running kernel. docs/design.md, "Owned clients", has the details.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
