@@ -53,7 +53,7 @@ void shadowBuilt() {
     stage(ops, originals);
 
     // Route all three, in an order different from the table's, to a set of
-    // replacement targets (raw addresses, as RgfxGate's stripped pointers).
+    // replacement targets (raw addresses, as a client's stripped pointers).
     const char *names[] = {"vnode_check_signature", "file_check_mmap",
                            "file_check_library_validation"};
     uint64_t targets[] = {0xFFFFFE0008000000ULL, 0xFFFFFE0008001000ULL, 0xFFFFFE0008002000ULL};
