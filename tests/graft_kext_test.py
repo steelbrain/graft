@@ -448,6 +448,23 @@ class RefusalTest(unittest.TestCase):
         self.assertRefused(process, "consumer personality Fixture names no IOProviderClass")
         self.assertFalse((self.inputs.root / "no-provider-class/Fixture.kext").exists())
 
+    def test_a_personality_that_already_carries_the_gate(self):
+        # As a staged Info.plist's do: its provider matching would then match only nubs
+        # whose gate is already open, so Graft would never open one.
+        key = f"{IDENTIFIER}.graft-bound"
+        reason = (
+            f"consumer personality Fixture already carries the activation key {key} in its "
+            "IOPropertyMatch; give the Info.plist as written, not a staged one"
+        )
+        cases = (("gated", {key: True}), ("gated-list", [{"model": "one"}, {key: False}]))
+        for name, match in cases:
+            info = fixture_info()
+            info["IOKitPersonalities"]["Fixture"]["IOPropertyMatch"] = match
+            path = self.inputs.write(f"{name}.plist", plistlib.dumps(info))
+            process = self.inputs.build(name, info_plist=path)
+            self.assertRefused(process, reason)
+            self.assertFalse((self.inputs.root / f"{name}/Fixture.kext").exists())
+
     def test_compiler_flags_for_another_architecture(self):
         process = self.inputs.build("other-arch", flags=["-arch", "arm64e", f"-I{FIXTURE}"])
         self.assertRefused(process, "the compiler flags target arm64e, not ARCH's x86_64")

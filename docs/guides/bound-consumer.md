@@ -88,7 +88,10 @@ personality with a passive `IOPropertyMatch`, added to the one a personality
 already has. The kernel then registers the kext but does not construct it
 until Graft opens the gate on a nub the personality's provider matching
 matches. A bound
-consumer calls nothing in Graft, so it needs no dependency on it.
+consumer calls nothing in Graft, so it needs no dependency on it. The build
+refuses a personality whose `IOPropertyMatch` already holds the gate's key, as
+a staged Info.plist's do, since Graft would then watch only for nubs whose gate
+is already open. Give it the Info.plist you wrote.
 
 ## 4. Link through consumer.mk
 

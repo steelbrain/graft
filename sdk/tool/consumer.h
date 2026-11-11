@@ -180,8 +180,9 @@ std::vector<uint32_t> requiredSlots(const ClassDeclaration &declaration, const C
                                     const std::vector<const VtableRecord *> &vtables);
 
 // The consumer's activation, from its Info.plist. Refuses a personality that is
-// not a dictionary, names no IOProviderClass, or has an IOPropertyMatch that is
-// neither a dictionary nor a list of them.
+// not a dictionary, names no IOProviderClass, has an IOPropertyMatch that is
+// neither a dictionary nor a list of them, or already carries the gate key in
+// its IOPropertyMatch.
 Activation consumerActivation(const Plist &info);
 // The __DATA,__graft size the consumer linked as image needs.
 uint64_t reservationSize(const Image &image, const Declaration &declaration, const Layouts &layouts,

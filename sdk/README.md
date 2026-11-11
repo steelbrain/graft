@@ -371,8 +371,11 @@ Staging checks its inputs before it creates the output bundle.
   each naming the consumer's bundle identifier. A personality may match any
   provider, and must name one in `IOProviderClass`. A personality that has its
   own `IOPropertyMatch`, a dictionary or a list of them, keeps it, and the
-  gate's key joins the dictionary, or each one of the list. The declared
-  libraries leave `OSBundleLibraries`, and any per-architecture list such as
+  gate's key joins the dictionary, or each one of the list. A personality
+  whose `IOPropertyMatch` already holds the gate's key, as a staged
+  Info.plist's do, is refused, since Graft would then watch only for nubs
+  whose gate is already open. The declared libraries leave
+  `OSBundleLibraries`, and any per-architecture list such as
   `OSBundleLibraries_x86_64`. Its other dependencies stay.
 - **The manifest carries the provider matching.** It records each personality
   as the author wrote it, without the gate and without `IOClass`,

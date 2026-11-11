@@ -952,8 +952,11 @@ std::string gateKey(const Plist &info) {
 // personality only against a provider of the class its IOProviderClass names, so
 // each must name one; Graft watches for providers by the same dictionaries. A
 // personality's own IOPropertyMatch, where it has one, is a dictionary or a list
-// of them any one of which matches.
+// of them any one of which matches, and none may hold the gate key already, as a
+// staged Info.plist's do: Graft would then watch only for nubs whose gate is
+// already open, and never open one.
 const Plist &personalities(const Plist &info) {
+    std::string key = gateKey(info);
     const Plist *personalities = info.find("IOKitPersonalities");
     bool none = !personalities ||
                 (personalities->kind == Plist::Kind::Dict && personalities->dict.empty());
@@ -974,6 +977,15 @@ const Plist &personalities(const Plist &info) {
              !std::all_of(properties->array.begin(), properties->array.end(), dictionary)))
             throw Error("consumer personality " + name +
                         " has an IOPropertyMatch that is not a dictionary or a list of them");
+        auto gated = [&key](const Plist &one) { return one.find(key) != nullptr; };
+        if (properties &&
+            (properties->kind == Plist::Kind::Dict
+                     ? gated(*properties)
+                     : std::any_of(properties->array.begin(), properties->array.end(), gated)))
+            throw Error("consumer personality " + name + " already carries the activation key " +
+                        key +
+                        " in its IOPropertyMatch; give the Info.plist as written, not a "
+                        "staged one");
     }
     return *personalities;
 }

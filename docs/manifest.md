@@ -299,7 +299,8 @@ personality's provider: the personality as its author wrote it, its own
 `IOPropertyMatch` included, less the keys that name the driver rather than the
 provider, `IOClass`, `CFBundleIdentifier`, `IOProbeScore` and
 `IOMatchCategory`. It never holds the gate key, which only the staged
-personalities carry. For a personality written
+personalities carry: `graft-kext` refuses a personality whose own
+`IOPropertyMatch` already holds it. For a personality written
 
 ```xml
 <key>Display</key>
