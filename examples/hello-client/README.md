@@ -19,8 +19,8 @@ kext's start routine. That function:
 - publishes its state with `graft_client_state`.
 
 Graft serves a call when its identifier names a placed kext, so this client
-passes its own bundle identifier, `ai.aneesiqbal.graft.HelloClient`. Graft is
-pinned to no fixed name, and no change to Graft is needed to serve it.
+passes its own bundle identifier, `ai.aneesiqbal.graft.HelloClient`. Graft
+names no client, so serving this one needs no change to Graft.
 
 This client installs no routes. Routing a kernel function, with the trampoline
 and the callable original, is shown by the test client

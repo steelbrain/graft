@@ -7,10 +7,10 @@ it by symbol name at boot. This guide builds one, using
 [examples/hello-consumer](../../examples/hello-consumer/README.md) as the
 running example.
 
-Graft binds every consumer placed at boot, whatever its bundle identifier: a
-kext declares itself a bound consumer by the manifest its build writes, and its
-personalities may match any provider. The example's identifier is its own,
-`ai.aneesiqbal.graft.HelloConsumer`.
+Any kext can be a bound consumer. Graft binds every kext placed at boot that
+carries the manifest its build writes, whatever its bundle identifier, and
+opens its gate on whatever provider its personalities match. The example's
+identifier is its own, `ai.aneesiqbal.graft.HelloConsumer`.
 
 ## What you need
 

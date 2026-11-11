@@ -1,7 +1,7 @@
 # Agents working on Graft
 
-Graft is a macOS kext that binds and routes for a fixed set of kexts inside
-macOS virtual machines, with System Integrity Protection on. Read
+Graft is a macOS kext that binds and routes for any kext placed beside it
+inside macOS virtual machines, with System Integrity Protection on. Read
 [README.md](README.md) for what it does, [CONTRIBUTING.md](CONTRIBUTING.md)
 for how to build, test and change it, and [docs/](docs/README.md) for how it
 works. Everything in CONTRIBUTING.md applies to agents; this file adds what an

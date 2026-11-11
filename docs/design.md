@@ -34,15 +34,19 @@ Graft's Info.plist marks it `OSBundleRequired` Root and gives it one IOKit
 personality, a `Graft` service matching `IOResources`. That personality makes
 the kernel start the kext on every boot, even one with no consumer present.
 
-Graft serves two kinds of kexts:
+Graft serves two kinds of kexts, and any placed kext can be either. Graft names
+none of them:
 
 - An **owned client** calls Graft's interface, declared in
-  [sdk/include/graft/Graft.h](../sdk/include/graft/Graft.h). Any placed kext can
-  be one; Graft serves it by placement, not by a name of its own.
+  [sdk/include/graft/Graft.h](../sdk/include/graft/Graft.h), passing its own
+  bundle identifier. Graft serves the call when that identifier names a placed
+  kext ([Owned clients](#owned-clients)).
 - A **bound consumer** derives from classes, or calls functions, in libraries
-  of the System collection. Graft binds it by symbol name. Graft binds every
-  placed kext that carries a manifest, any number of them, and holds no
-  consumer's identity. ReimsGraphics is one.
+  of the System collection, and builds with the SDK, which writes a manifest
+  into its `__DATA,__graft` section. Graft binds every placed kext that carries
+  one, any number of them, by symbol name, and opens each one's gate on the
+  providers its own personalities match
+  ([Binding a consumer](#binding-a-consumer)).
 
 ## Start
 
@@ -87,10 +91,10 @@ copy silently.
 
 Each call passes a bundle identifier, and Graft serves it when that identifier
 names a kext the boot linker placed: a fileset entry in the Boot collection on
-x86-64, a device-tree node the firmware wrote on arm64e (`placedBase`). Graft is
-pinned to no fixed name, so any placed kext can be a client, and every
-`GraftClient.<id>` registry key names a real kext. It does not otherwise check
-which kext makes the call.
+x86-64, a device-tree node the firmware wrote on arm64e (`placedBase`). Graft
+names no client, so any placed kext can be one, and every `GraftClient.<id>`
+registry key names a real kext. It does not otherwise check which kext makes
+the call.
 
 - `graft_client_ready` returns whether Graft is active and the identifier names
   a placed kext. The other calls that act on the kernel check the same.

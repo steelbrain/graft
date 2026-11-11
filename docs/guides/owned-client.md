@@ -7,12 +7,13 @@ does is the client's own policy. This guide builds one, using
 [examples/hello-client](../../examples/hello-client/README.md) as the running
 example.
 
-Graft is pinned to no fixed client name. Every call passes an identifier, and
-Graft serves it when that identifier names a kext the boot linker placed: a
-fileset entry in the Boot collection on x86-64, a device-tree node the firmware
-wrote on arm64e. So a client passes its own bundle identifier; the example
-passes `ai.aneesiqbal.graft.HelloClient`, which is also its
-`CFBundleIdentifier`. No change to Graft is needed to serve a new client.
+Any kext placed at boot can be an owned client. Every call passes a bundle
+identifier, and Graft serves it when that identifier names a kext the boot
+linker placed: a fileset entry in the Boot collection on x86-64, a device-tree
+node the firmware wrote on arm64e. So a client passes its own bundle
+identifier; the example passes `ai.aneesiqbal.graft.HelloClient`, which is also
+its `CFBundleIdentifier`. Graft names no client, so serving a new one needs no
+change to Graft.
 
 ## What you need
 

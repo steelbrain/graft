@@ -11,8 +11,9 @@ and [docs/manifest.md](../docs/manifest.md) specifies what a consumer embeds.
 The code is C++17 for the kernel: no exceptions, no RTTI, no standard library.
 Types are PascalCase, functions and variables camelCase. The constants of the
 generic mechanism are in one place, [Policy.h](Policy.h): AMFI's identifier and
-the route limits. Graft names neither a client nor a consumer there; a client
-is identified by placement, and a consumer declares itself by its manifest.
+the route limits. No kext Graft serves is named anywhere in the source: a
+client is served because the identifier it passes names a placed kext, and a
+consumer is bound because it carries a manifest.
 
 ## The boot, end to end
 
@@ -44,7 +45,7 @@ After that:
 - **On x86-64, each catalogue send** calls `bindConsumers`, which tries each
   dormant consumer's bind again until it succeeds or is refused. On arm64e the
   first attempt binds against the images already in place.
-- **The owned client** calls the C interface in
+- **Each owned client** calls the C interface in
   [Graft.h](../sdk/include/graft/Graft.h), implemented in [Start.cpp](Start.cpp),
   to look up kernel symbols and install its routes.
 

@@ -1,6 +1,7 @@
 # Building a kext for Graft
 
-Graft serves two kinds of kexts, and a kext is built differently for each.
+Graft serves two kinds of kexts, and a kext is built differently for each. Any
+kext placed in the boot image beside Graft can be either.
 
 - An **owned client** calls Graft's interface to look up kernel symbols and
   route kernel functions.
@@ -11,12 +12,19 @@ This page says what sets the two apart and how each goes into a boot image.
 The guides take you through the steps, and [design.md](design.md) explains
 what Graft does with each kext at boot.
 
-Graft binds every bound consumer placed at boot, whatever its bundle
-identifier: a kext declares itself one by the manifest it carries, and its
-personalities may match any provider. It serves any placed kext as an owned
-client too: a call is served when its identifier names a kext the boot linker
-placed. So neither kind is named in `src/Policy.h`, and neither needs a change
-to Graft.
+Graft finds each kind without being told its name:
+
+- **A bound consumer** by its manifest. At start Graft looks through every
+  kext placed at boot, the Boot collection's fileset entries on x86-64 and the
+  boot firmware's device-tree nodes on arm64e, and keeps each one whose
+  `__DATA,__graft` section starts with the manifest's magic. Its personalities
+  match their providers as any driver's do, and once it is bound, Graft opens
+  its gate on every nub they match.
+- **An owned client** by the bundle identifier each call passes. Graft serves
+  the call when that identifier names a kext placed at boot, so a client
+  passes its own.
+
+So serving a new kext of either kind needs no change to Graft.
 
 Everything a kext builds with is in [sdk/](../sdk/README.md). Another
 repository takes a release, the SDK included, with `tools/vendor.py`
