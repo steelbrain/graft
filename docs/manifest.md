@@ -10,7 +10,9 @@ for an arm64e consumer. The two share the header and every table. They differ in
 a site's two trailing bytes: an x86-64 site is a pointer or a branch
 displacement, an arm64e site a signed pointer that carries its signing context.
 Only version 5 fills the segment, fill and synthesis tables; version 4 leaves
-them empty. Graft reads no other version. The definitions, and the validator below, are in
+them empty. Graft reads no other version, and refuses a consumer whose manifest
+has another by naming that version, since its fix is a rebuild with the SDK of
+the Graft release it boots with. The definitions, and the validator below, are in
 [sdk/include/graft/ManifestFormat.h](../sdk/include/graft/ManifestFormat.h),
 which Graft and the SDK's `graft-kext` share.
 

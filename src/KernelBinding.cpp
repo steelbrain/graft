@@ -258,15 +258,14 @@ uint64_t manifestSection(uint64_t base, RuntimeImage &image, size_t &size) {
 
 // Map the dormant consumer at base and open the manifest it carries in
 // __DATA,__graft. A missing section and a malformed manifest both leave the view
-// invalid and return false. sectionStart is the section's runtime address, so
-// the caller can keep writes out of it.
-bool openManifest(uint64_t base, RuntimeImage &consumer, manifest::View &view,
-                  uint64_t &sectionStart) {
+// invalid and return open()'s failure; a missing section is a header failure.
+// sectionStart is the section's runtime address, 0 without one, so the caller
+// can keep writes out of it and read a refused manifest's version.
+manifest::Failure openManifest(uint64_t base, RuntimeImage &consumer, manifest::View &view,
+                               uint64_t &sectionStart) {
     size_t sectionSize = 0;
     sectionStart = manifestSection(base, consumer, sectionSize);
-    return sectionStart &&
-           manifest::open(reinterpret_cast<const void *>(sectionStart), sectionSize, view).error ==
-                   manifest::Error::None;
+    return manifest::open(reinterpret_cast<const void *>(sectionStart), sectionSize, view);
 }
 
 // Whether the placed kext at base carries a consumer manifest: a __DATA,__graft
@@ -1138,8 +1137,21 @@ void attemptBind(Consumer &record) {
     RuntimeImage consumer;
     manifest::View view;
     uint64_t manifestStart = 0;
-    if (!openManifest(base, consumer, view, manifestStart)) {
-        report(record, "refused", "invalid consumer manifest");
+    auto failure = openManifest(base, consumer, view, manifestStart);
+    if (failure.error != manifest::Error::None) {
+        // A consumer built with another release's SDK is discovered by its magic
+        // but carries another version; name it, since rebuilding is the fix.
+        char reason[160];
+        uint32_t version = manifest::unsupportedVersion(
+                reinterpret_cast<const void *>(manifestStart), failure);
+        if (version)
+            snprintf(reason, sizeof(reason),
+                     "consumer manifest version %u is not one this Graft reads; rebuild the "
+                     "consumer with this release's SDK",
+                     version);
+        else
+            strlcpy(reason, "invalid consumer manifest", sizeof(reason));
+        report(record, "refused", reason);
         record.finished = true;
         return;
     }

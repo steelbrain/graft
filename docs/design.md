@@ -278,8 +278,11 @@ Steps 1 to 7 write nothing to the consumer or the kernel, though step 3 may
 load the consumer's libraries. A refusal at any of them leaves the consumer
 dormant and names the reason: the provider matching that is unusable, the
 missing symbol, the provider that is not there, or the class whose layout
-differs. A manifest that fails validation is
-reported only as `invalid consumer manifest`, without the rule it broke.
+differs. A manifest of a version Graft does not read, as a consumer built with
+another release's SDK carries, is reported with its version and a request to
+rebuild the consumer with this release's SDK. Any other manifest that fails
+validation is reported only as `invalid consumer manifest`, without the rule
+it broke.
 Graft never binds part of a consumer, and it never panics the guest over one.
 
 Once the gate is open, the consumer can start at any moment. Graft therefore

@@ -100,19 +100,30 @@ static void validation() {
     Fixture f;
     View v;
     CHECK(f.open(v).error == Error::None && v.valid());
+    CHECK(!unsupportedVersion(f.bytes.data(), f.open(v)));
     CHECK(!strcmp(v.string(f.library), "ai.aneesiqbal.graft.test.Fixture.library"));
     CHECK(!v.string(0) && !v.string(UINT32_MAX));
-    // Every byte-truncated blob must fail and clear a previously valid view.
+    // Every byte-truncated blob must fail and clear a previously valid view. No
+    // such failure is a version Graft names in its refusal.
     for (size_t length = 0; length < f.bytes.size(); ++length) {
-        CHECK(manifest::open(f.bytes.data(), length, v).error != Error::None && !v.valid());
+        auto failure = manifest::open(f.bytes.data(), length, v);
+        CHECK(failure.error != Error::None && !v.valid());
+        CHECK(!unsupportedVersion(f.bytes.data(), failure));
     }
     // Only the current versions are read: the earlier ones, which named a device
-    // rather than carrying provider matching, and any later one are refused.
+    // rather than carrying provider matching, and any later one are refused, and
+    // the refusal names the version, so its consumer's author knows to rebuild.
     for (uint32_t version : {2u, 3u, VersionArm64e + 1}) {
         f.h.version = version;
         f.save();
-        CHECK(f.open(v).error == Error::Version);
+        auto failure = f.open(v);
+        CHECK(failure.error == Error::Version);
+        CHECK(unsupportedVersion(f.bytes.data(), failure) == version);
     }
+    f.h.magic = Magic + 1; // another version under a wrong magic is not a manifest
+    f.save();
+    CHECK(!unsupportedVersion(f.bytes.data(), f.open(v)));
+    f.h.magic = Magic;
     // A version-5 (arm64e) manifest: the base site is a valid plain pointer,
     // and an authenticated site carries key, addrDiv and diversity.
     f.h.version = VersionArm64e;
@@ -564,6 +575,7 @@ static void segmentsAndFills() {
     f.h.version = Version; // x86-64 carries no segment or fill table
     f.save();
     CHECK(f.open(v).error == Error::Version);
+    CHECK(!unsupportedVersion(f.bytes.data(), f.open(v))); // a version Graft reads
     puts("segments and fills: pass (sorted/bounded segments, fill partition, version gate)");
 }
 

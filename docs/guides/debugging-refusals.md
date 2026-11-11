@@ -70,7 +70,8 @@ A refusal is final for the boot. The reasons, in the order Graft checks:
 
 | refused reason | meaning and what to do |
 |---|---|
-| `invalid consumer manifest` | the manifest in `__DATA,__graft` broke a rule of [manifest.md](../manifest.md#validation). Graft does not say which rule. Rebuild the consumer with the SDK of the Graft release you boot |
+| `consumer manifest version V is not one this Graft reads; rebuild the consumer with this release's SDK` | the consumer was built with the SDK of another Graft release, whose manifest version `V` this Graft does not read. Rebuild it with the SDK of the Graft release you boot |
+| `invalid consumer manifest` | the manifest in `__DATA,__graft` broke a rule of [manifest.md](../manifest.md#validation) other than its version. Graft does not say which rule. Rebuild the consumer with the SDK of the Graft release you boot |
 | `consumer started before binding` | the consumer was already running, so it was not injected dormant. Build it through `consumer.mk` |
 | `write-plan size overflow` | the manifest declares more writes than Graft can count. Rebuild the consumer with the SDK of the Graft release you boot |
 | `provider matching does not parse: <error>` | the manifest's provider matching is not an XML property list `OSUnserializeXML` reads; `<error>` is its message. Rebuild the consumer with the SDK of the Graft release you boot |
