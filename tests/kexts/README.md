@@ -55,6 +55,13 @@ landed, not just that the personality matched. Its bundle identifier is its own,
 `ai.aneesiqbal.graft.GateProbe`: Graft binds every placed kext that carries a
 manifest.
 
+Its three personalities match the PCI host bridge by its class code,
+`IOPCIClassMatch` `0x06000000&0xffff0000`, each with its own `IOMatchCategory`.
+QEMU's q35 machine, the x86-64 test guest, and vmapple, the arm64e one, both
+present a host bridge of class `0x060000` with no driver attached, so the probe
+needs no device of its own on either architecture. Each started category
+declines to attach, so the bridge stays as it was.
+
 It is a consumer, so it is built through the SDK with its own Makefile:
 
 ```sh

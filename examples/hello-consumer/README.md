@@ -26,8 +26,16 @@ and its start routine calls through both and records the result.
 
 Graft binds every placed kext that carries a manifest, whatever its bundle
 identifier, so this example has its own, `ai.aneesiqbal.graft.HelloConsumer`.
-Its personality matches the PCI device `1234:5247`, and Graft opens the gate on
-whatever nub it matches.
+
+Its personality matches `IOResources`, which every guest registers on both
+architectures, so the example runs without any particular device. It names an
+`IOMatchCategory` of its own, `GraftHelloConsumer`, so it does not compete with
+the other drivers that match `IOResources`. Graft opens the gate on whatever
+provider a personality matches. On `IOResources` that means setting the gate
+property and registering `IOResources` again, which is what
+`IOService::publishResource` does for every resource a driver publishes. Its
+`probe` then declines, so nothing attaches. A real driver's personalities match
+its own device, and Graft opens the gate on that device's nub.
 
 ## Build
 

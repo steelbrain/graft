@@ -74,8 +74,10 @@ Write `src/Info.plist` as an ordinary kext's:
 
 - `CFBundleIdentifier` is the kext's own, under which Graft reports its bind;
 - each personality names its provider's class in `IOProviderClass` and
-  matches the provider as any personality does, such as the example's
-  `IOPCIDevice` with `IOPCIPrimaryMatch`;
+  matches the provider as any personality does. A driver matches its own
+  device, such as an `IOPCIDevice` by `IOPCIPrimaryMatch`. The example matches
+  `IOResources`, with an `IOMatchCategory` of its own, so that it runs in any
+  guest;
 - `OSBundleLibraries` lists the System-collection libraries from
   `graft.json`, beside your other dependencies;
 - `CFBundleVersion` may be `@VERSION@`, which the build replaces.
@@ -149,8 +151,8 @@ make -C examples/hello-consumer ARCH='-arch arm64e'  # arm64e
 Its output is `build/GraftHelloConsumer.kext`, or
 `build/GraftHelloConsumer-arm64e.kext`. A build that cannot produce a
 consumer Graft could bind stops with `consumer:` and the reason, such as a
-provider with no class or anchor, or a personality that does not name the
-device.
+provider with no class or anchor, or a personality that names no
+`IOProviderClass`.
 
 ## 6. Put it in the boot image
 

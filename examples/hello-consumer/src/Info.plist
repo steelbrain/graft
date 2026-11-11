@@ -11,8 +11,8 @@
         <key>GraftHelloConsumer</key><dict>
             <key>CFBundleIdentifier</key><string>ai.aneesiqbal.graft.HelloConsumer</string>
             <key>IOClass</key><string>GraftHelloConsumer</string>
-            <key>IOProviderClass</key><string>IOPCIDevice</string>
-            <key>IOPCIPrimaryMatch</key><string>0x52471234</string>
+            <key>IOMatchCategory</key><string>GraftHelloConsumer</string>
+            <key>IOProviderClass</key><string>IOResources</string>
         </dict>
     </dict>
     <key>OSBundleLibraries</key><dict>
