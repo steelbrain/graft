@@ -14,6 +14,7 @@
 #include "X86Route.h"
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
+#include <mach/kmod.h>
 #include <mach/vm_prot.h>
 #include <stdarg.h>
 
@@ -37,7 +38,9 @@ bool uncertain;
 uint64_t installed[RouteCapacity];
 size_t installedSize[RouteCapacity];
 void **originalStorage[RouteCapacity];
-const char *installedBy[RouteCapacity]; // the client that holds each slot, null for Graft's own
+// The client that holds each slot, empty for Graft's own. A copy, since a client's
+// identifier string need not outlive its call.
+char installedBy[RouteCapacity][KMOD_MAX_NAME];
 x86::RoutePlan plans[RouteCapacity];
 uint8_t oldTrampolines[RouteCapacity][x86::MaxTrampoline];
 char refusal[192];
@@ -139,12 +142,9 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
         uint64_t extent = source ? kernel->symbolExtent(source) : 0;
         size_t available = extent < x86::MaxDisplaced ? extent : x86::MaxDisplaced;
         const char *heldBy = nullptr;
-        bool held = false;
         for (size_t j = 0; j < used; ++j) {
-            if (source && installed[j] == source) {
-                held = true;
+            if (source && installed[j] == source)
                 heldBy = installedBy[j];
-            }
             if (originalStorage[j] == request.original)
                 complete = false;
         }
@@ -152,11 +152,11 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
             if (reinterpret_cast<uint64_t>(entries[j].address) == source ||
                 requests[j].original == request.original)
                 complete = false;
-        if (held) {
+        if (heldBy) {
             // The pool is shared first come first served, and the slot already
             // holds this function. Name the client that routed it, so a second
             // client sees the collision in its own refusal state.
-            refuse("%s: already routed by %s", request.symbol, heldBy ? heldBy : "Graft");
+            refuse("%s: already routed by %s", request.symbol, heldBy[0] ? heldBy : "Graft");
             complete = false;
             break;
         }
@@ -235,7 +235,7 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
                 installed[used + i] = reinterpret_cast<uint64_t>(entries[i].address);
                 installedSize[used + i] = entries[i].size;
                 originalStorage[used + i] = requests[i].original;
-                installedBy[used + i] = client;
+                strlcpy(installedBy[used + i], client ? client : "", KMOD_MAX_NAME);
                 note("route: %s %s", requests[i].symbol,
                      complete ? "installed" : "retained after unverified rollback");
             }
