@@ -184,10 +184,10 @@ lookup returned nothing, and Graft refused the consumer at its anchor check.
 A kext that is placed in a collection is not started until a driver matches in
 it or a started kext depends on it.
 
-Make the family a dependency of a kext that always starts. Graft starts on
-every boot, so the arm64e Graft lists that family in its `OSBundleLibraries`,
-and the kernel loads and starts it before Graft. The x86-64 Graft has no such
-family and does not list it (`Makefile`, the `graft-arm64e` rule).
+Start the provider before binding against it. Graft asks the kernel to start
+each library a consumer's manifest names (`OSKextLoadKextWithIdentifier`), on
+arm64e as on x86-64, so Graft itself depends on no consumer's family
+(`src/arm64e/BindingPlacement.cpp`, `locate`).
 
 ## Reading kernel collections
 

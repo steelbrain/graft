@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR LGPL-3.0-or-later
 // The arm64e binding placement (src/BindingPlacement.h). The boot firmware places
 // every image before Graft's kmod start, so there is nothing to route and nothing
-// to wait for: the bind runs once. The Apple providers (IOGraphicsFamily and the
-// libkern/IOKit base classes) stay in the Boot collection openKernel holds, so a
-// provider is still its fileset entry there; this placement uses no OSKext and no
-// started gating, since a placed entry is already present. The kexts Graft serves,
-// the consumers and the owned client, land in the Auxiliary collection instead,
-// so each is read from the boot firmware's per-kext device-tree node, named by
-// its bundle identifier.
+// to wait for: the binds run once. The Apple providers stay in the Boot collection
+// openKernel holds, so a provider is its fileset entry there. A placed kext is not
+// started until a driver matches in it or a started kext depends on it, and its
+// classes register only as it starts, so Graft starts each provider through
+// OSKextLoadKextWithIdentifier, as the x86-64 placement does. The kexts Graft
+// serves, its consumers and clients, land in the Auxiliary collection instead, so
+// each is read from the boot firmware's per-kext device-tree node, named by its
+// bundle identifier.
 #include "BindingPlacement.h"
 #include "MachO.h"
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IORegistryEntry.h>
+#include <libkern/OSKextLib.h>
 #include <libkern/c++/OSData.h>
 #include <string.h>
 
@@ -29,9 +31,20 @@ bool installBindingTrigger(const RuntimeImage &, void (*)()) {
 Placement locate(const mach_header_64 *collection, const char *identifier, char *reason,
                  size_t reasonSize) {
     Placement placement;
-    placement.base = macho::filesetEntry(collection, identifier);
-    if (!placement.base)
+    uint64_t base = macho::filesetEntry(collection, identifier);
+    if (!base) {
         snprintf(reason, reasonSize, "%s: not a collection entry", identifier);
+        return placement;
+    }
+    // Start the provider, as the kernel starts a kext's dependencies. One that
+    // is already running returns success at once. There is no later attempt on
+    // arm64e, so a failed start refuses the consumer.
+    auto result = OSKextLoadKextWithIdentifier(identifier);
+    if (result != kOSReturnSuccess) {
+        snprintf(reason, reasonSize, "%s is not started (load %#x)", identifier, result);
+        return placement;
+    }
+    placement.base = base;
     return placement;
 }
 

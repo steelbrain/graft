@@ -168,10 +168,11 @@ After that:
   required. Arm64Route.h is the plan, which the host tests run; Route.cpp does
   the live reads and the swap.
 - [arm64e/BindingPlacement.cpp](arm64e/BindingPlacement.cpp): no trigger to
-  install. A provider is its fileset entry in the Boot collection, and the
-  consumers are found among the device-tree nodes of the placed kexts. Nothing waits for a kext to
-  start. A write may land only in a writable data segment that the kernel has
-  not locked read-only.
+  install. A provider is its fileset entry in the Boot collection, which Graft
+  starts with `OSKextLoadKextWithIdentifier` before binding against it, and the
+  consumers are found among the device-tree nodes of the placed kexts. Nothing
+  waits for a kext to start. A write may land only in a writable data segment
+  that the kernel has not locked read-only.
 - [arm64e/Fixup.h](arm64e/Fixup.h): an import site's new value. Each site holds
   a pointer the loader signed for the local placeholder. Graft authenticates it
   and signs the real target under the same key and discriminator.
@@ -230,9 +231,7 @@ following from the firmware:
 
 - **Placement.** Graft and the kexts it serves are placed in the Auxiliary
   kernel collection before the kernel starts, with their undefined symbols
-  bound to kernel exports, and their `__DATA` mapped writable. The arm64e
-  Graft lists IOMobileGraphicsFamily in its `OSBundleLibraries`, so the kernel
-  starts that family before Graft.
+  bound to kernel exports, and their `__DATA` mapped writable.
 - **`/chosen/ambrosia`, property `boot-kc-base`.** 8 bytes: the slid address
   of the Boot kernel collection's Mach-O header.
 - **`/chosen/ambrosia/<bundle id>`, property `base`.** One node per placed

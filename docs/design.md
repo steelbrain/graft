@@ -33,8 +33,6 @@ A few terms recur below:
 Graft's Info.plist marks it `OSBundleRequired` Root and gives it one IOKit
 personality, a `Graft` service matching `IOResources`. That personality makes
 the kernel start the kext on every boot, even one with no consumer present.
-The arm64e Graft also lists IOMobileGraphicsFamily in its `OSBundleLibraries`
-([Start and binding on arm64e](#start-and-binding-on-arm64e)).
 
 Graft serves two kinds of kexts:
 
@@ -234,10 +232,11 @@ they are. Each attempt runs these steps:
    personalities stay in its Info.plist, gated at build time.
 3. **Open the providers.** On x86-64, each library the consumer imports from
    must be registered with the kernel; until then Graft waits. Graft then asks
-   the kernel to load it (`OSKextLoadKextWithIdentifier`), and waits until it
-   reports started. Graft finds the library's fileset entry, places the
-   entry's symbol table from a class's live metaclass and that class's
-   `gMetaClass` symbol, and requires the metaclass to lie inside the entry.
+   the kernel to load and start it (`OSKextLoadKextWithIdentifier`), and on
+   x86-64 waits until it reports started. Graft finds the library's fileset
+   entry, places the entry's symbol table from a class's live metaclass and
+   that class's `gMetaClass` symbol, and requires the metaclass to lie inside
+   the entry.
 4. **Measure the classes** the consumer derives from: each class's size from
    its `OSMetaClass`, and its vtable's length and slots from the loaded
    library. Each must have exactly the size and vtable length the consumer was
@@ -302,15 +301,15 @@ Graft's start differs in three places:
   so the first attempt at start is the only one, and a consumer left
   `waiting` stays so for the boot.
 
-The arm64e Graft lists IOMobileGraphicsFamily in its `OSBundleLibraries`, so
-the kernel starts that family before Graft. Nothing else on the paravirtual
-machine starts it, and its classes must be registered for Graft to bind a
-consumer of them.
-
 Binding follows the same steps, with these differences:
 
-- A provider is its fileset entry in the Boot collection. Graft neither asks
-  the kernel to load it nor waits for it to start.
+- A provider is its fileset entry in the Boot collection. Graft asks the
+  kernel to start it, as on x86-64, but does not wait: the Boot collection's
+  kexts are registered before Graft starts, and a start that fails refuses
+  the consumer. A placed kext is not started until a driver matches in it or
+  a started kext depends on it, and its classes register only as it starts, so
+  this start is what registers the classes of a family nothing else on the
+  machine uses.
 - Graft finds the consumers among the children of `/chosen/ambrosia`, the
   device-tree nodes the firmware publishes for the kexts it places.
 - The firmware places each segment of the consumer separately, by name, so

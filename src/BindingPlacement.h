@@ -3,9 +3,10 @@
 // their providers register as kexts and land in a kernel collection, found
 // through OSKext and the collection's fileset, and the binds retry on each
 // catalogue send. On arm64 the boot firmware places them before Graft's kmod
-// start and names each in the device tree, so the binds run once with no retry
-// and no OSKext. The binding itself (KernelBinding.cpp) is architecture-neutral
-// and reaches both through this interface.
+// start and names each in the device tree, so the binds run once with no retry.
+// Both start each provider through OSKext before binding against it. The binding
+// itself (KernelBinding.cpp) is architecture-neutral and reaches both through
+// this interface.
 #pragma once
 #include "RuntimeImage.h"
 
@@ -36,12 +37,12 @@ void eachPlacedKext(const mach_header_64 *bootCollection,
                     void (*visit)(void *context, const char *identifier, uint64_t base),
                     void *context);
 
-// Locate provider `identifier` and fill base (0 on a miss). x86-64 requires it
-// registered and started through OSKext, finds its live header in the kernel
-// collection, and retains it in hold for the caller to release; arm64 reads the
-// Boot collection's fileset entry, where every provider is already present, and
-// retains nothing. A miss that may resolve on a later send sets waiting; reason
-// explains it.
+// Locate provider `identifier`, start it, and fill base (0 on a miss). x86-64
+// requires it registered and started through OSKext, finds its live header in the
+// kernel collection, and retains it in hold for the caller to release; arm64 reads
+// the Boot collection's fileset entry, starts it through OSKext, and retains
+// nothing. A miss that may resolve on a later send sets waiting; reason explains
+// it.
 Placement locate(const mach_header_64 *collection, const char *identifier, char *reason,
                  size_t reasonSize);
 

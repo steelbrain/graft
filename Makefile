@@ -102,8 +102,7 @@ release:
 $(BINARY): $(CORE) src/Info.plist Makefile
 	@mkdir -p $(@D)
 	xcrun --sdk macosx ld -arch x86_64 -kext -undefined dynamic_lookup $(CORE) -o $@
-	sed -e 's/@VERSION@/$(VERSION)/g' -e '/@GRAFT_ARM64E_LIBS@/d' src/Info.plist \
-		> $(BUNDLE)/Contents/Info.plist
+	sed -e 's/@VERSION@/$(VERSION)/g' src/Info.plist > $(BUNDLE)/Contents/Info.plist
 	plutil -lint $(BUNDLE)/Contents/Info.plist
 
 test: $(BUILD)/macho_test $(BUILD)/binding_test $(BUILD)/manifest_test $(BUILD)/x86_route_test $(BUILD)/arm64e_fixup_test $(BUILD)/arm64e_route_test $(BUILD)/arm64e_synthesize_test $(BUILD)/arm64e_vtable_disc_test $(BUILD)/arm64e_synthesize_vtable_test $(BUILD)/write_plan_test $(BUILD)/fixture.dylib $(BUILD)/kernel/Fixture $(BUILD)/graft-kext $(BUILD)/staging_test $(BUILD)/synth_emit_test $(BUILD)/prelink_test $(TOOL_FIXTURES)
@@ -188,16 +187,15 @@ kernel-check-arm64e: $(ARM_CORE)
 	@echo "arm64e: the neutral core and the arm64e layer compile"
 
 # The arm64e Graft kext. It links with its undefined symbols unresolved, and
-# the boot firmware's placement binds each to a vmapple kernel export; the
-# arm64e layer uses no OSKext and no PE_get_kc_header, which it could not bind.
+# the boot firmware's placement binds each to a vmapple kernel export. The
+# arm64e layer reaches OSKext only through OSKextLoadKextWithIdentifier, an
+# export, and uses no PE_get_kc_header, which it could not bind.
 graft-arm64e: $(ARM_BINARY)
 
 $(ARM_BINARY): $(ARM_CORE) src/Info.plist Makefile
 	@mkdir -p $(@D)
 	xcrun --sdk macosx ld -arch arm64e -kext -undefined dynamic_lookup $(ARM_CORE) -o $@
-	sed -e 's/@VERSION@/$(VERSION)/g' \
-		-e 's|@GRAFT_ARM64E_LIBS@|<key>com.apple.iokit.IOMobileGraphicsFamily</key><string>1.0.0</string>|' \
-		src/Info.plist > $(ARM_BUNDLE)/Contents/Info.plist
+	sed -e 's/@VERSION@/$(VERSION)/g' src/Info.plist > $(ARM_BUNDLE)/Contents/Info.plist
 	plutil -lint $(ARM_BUNDLE)/Contents/Info.plist
 
 core-probe: $(BUILD)/GraftCoreProbe.kext/Contents/MacOS/GraftCoreProbe
