@@ -49,12 +49,13 @@ bool graft_kernel_symbol(const char *identifier, const char *symbol, uint64_t *a
 // form is per-architecture (see graft_route_request). On x86-64 the routes are
 // kernel-text trampolines and must be in place before BSD starts; on arm64 the
 // route is one atomic swap of a policy table, safe at any time, so a client that
-// matches as an IOKit driver installs after BSD. Each replacement must lie in
-// the calling kext's own executable text, or the request is refused. Graft
-// publishes the outcome as the client's state: "routed", or "refused" naming the
-// route and the reason. It returns false and records nothing when Graft is not
-// active, or count is 0 or more than sixteen. A kernel function another client
-// already routes is refused, so routes across clients never collide.
+// matches as an IOKit driver installs after BSD. Each replacement must lie in an
+// executable segment of the kext that identifier names, or the request is
+// refused; Graft does not check which kext makes the call. Graft publishes the
+// outcome as the client's state: "routed", or "refused" naming the route and
+// the reason. It returns false and records nothing when Graft is not active, or
+// count is 0 or more than sixteen. A kernel function another client already
+// routes is refused, so routes across clients never collide.
 // Routes live for the boot. Keep replacement code, wrapper state and original
 // storage resident even on failure: an unverified rollback can retain a route.
 bool graft_route_kernel(const char *identifier, const graft_route_request *requests, size_t count);

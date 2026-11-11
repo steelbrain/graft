@@ -115,7 +115,9 @@ bool routeKernel(const char *client, const RouteRequest *requests, size_t count)
         refuse("live installation after BSD publication");
         complete = false;
     } else if (!complete) {
-        refuse("transaction: all %zu shared route slots are reserved", RouteCapacity);
+        refuse("transaction: %zu routes requested, but only %zu of the %zu shared route slots "
+               "are free",
+               count, RouteCapacity - used, RouteCapacity);
     }
     for (size_t i = 0; complete && i < count; ++i) {
         auto &request = requests[i];
