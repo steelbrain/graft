@@ -10,7 +10,7 @@
         <key>SynthDisplay</key><dict>
             <key>IOClass</key><string>SynthDisplay</string>
             <key>IOProviderClass</key><string>IOPCIDevice</string>
-            <key>IOPCIPrimaryMatch</key><string>0x52471234</string>
+            <key>IOPCIClassMatch</key><string>0x03000000&amp;0xff000000</string>
         </dict>
     </dict>
     <key>OSBundleLibraries</key><dict>

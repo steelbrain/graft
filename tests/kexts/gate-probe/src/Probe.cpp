@@ -23,7 +23,7 @@ static const char *probeCategory(IOService *self) {
 // so reaching probe() at all means the gate deferred matching until the bind;
 // the serial line times it against Graft's property-set line.
 IOService *GraftGateProbe::probe(IOService *, SInt32 *) {
-    IOLog("reims-graft-gate: probe %s\n", probeCategory(this));
+    IOLog("graft-gate-probe: probe %s\n", probeCategory(this));
     return this;
 }
 
@@ -35,7 +35,7 @@ bool GraftGateProbe::start(IOService *) {
     // was reached with the import bound, not a live accelerator on the test GPU,
     // and IOAccelerator's own start is heavy; the recorded property is the signal.
     const char *category = probeCategory(this);
-    IOLog("reims-graft-gate: start %s\n", category);
+    IOLog("graft-gate-probe: start %s\n", category);
     IOAccelID identifier = 0;
     IOReturn result = graft_gate_create(0, &identifier);
     if (result == kIOReturnSuccess)
