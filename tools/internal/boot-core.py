@@ -52,12 +52,16 @@ GRAFT = ROOT / "build/Graft.kext"
 APPLE_NVRAM_GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 # The test kexts that publish states of their own on the registry root, by bundle
 # identifier: each key must read "passed" once the kext has checked its work in the guest
-# (tests/kexts/README.md, examples/README.md). gate-probe sets one per personality, named
-# by the personality's GraftGateCategory.
+# (tests/kexts/README.md, examples/README.md). gate-probe sets one per personality,
+# GraftGateProbe.<category>, named by the personality's GraftGateCategory.
 OWN_STATES = {
     "ai.aneesiqbal.graft.CoreProbe": ("GraftProbeState",),
     "ai.aneesiqbal.graft.HelloConsumer": ("GraftHelloConsumerState",),
-    "ai.aneesiqbal.graft.GateProbe": ("Display", "Accelerator", "Control"),
+    "ai.aneesiqbal.graft.GateProbe": (
+        "GraftGateProbe.Display",
+        "GraftGateProbe.Accelerator",
+        "GraftGateProbe.Control",
+    ),
 }
 SSH_UP_TIMEOUT = 480
 

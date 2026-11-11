@@ -76,7 +76,8 @@ it shows that a refused consumer stays dormant with no category started.
 
 boot-core.py injects it as a consumer, `--consumer build/GraftGateProbe.kext
 bound`, and requires the key each started personality sets on the registry
-root, named by its `GraftGateCategory`, to read `passed`. The `REFUSE=1`
+root, `GraftGateProbe.<category>` named by its `GraftGateCategory`, to read
+`passed`. The `REFUSE=1`
 variant goes in as `--consumer build/GraftGateProbe-refuse.kext refused`, or
 with more of the refusal as its state, beside other kexts to show that one
 consumer's refusal leaves the others bound.

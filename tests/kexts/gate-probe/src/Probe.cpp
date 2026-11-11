@@ -29,9 +29,9 @@ IOService *GraftGateProbe::probe(IOService *, SInt32 *) {
 
 bool GraftGateProbe::start(IOService *) {
     // The personality the gate deferred now starts. Exercise the bound import to
-    // confirm the bind, then record the outcome on the registry root keyed by
-    // category, so one property opening every category at once is visible in
-    // ioreg. Decline to attach (return false): the test needs only that start()
+    // confirm the bind, then record the outcome on the registry root as
+    // GraftGateProbe.<category>, so one property opening every category at once
+    // is visible in ioreg. Decline to attach (return false): the test needs only that start()
     // was reached with the import bound, not a live accelerator on the host
     // bridge, and IOAccelerator's own start is heavy; the recorded property is
     // the signal.
@@ -41,10 +41,11 @@ bool GraftGateProbe::start(IOService *) {
     IOReturn result = graft_gate_create(0, &identifier);
     if (result == kIOReturnSuccess)
         result = IOAccelerator::releaseAccelID(0, identifier);
+    char key[64];
+    snprintf(key, sizeof(key), "GraftGateProbe.%s", category);
     auto root = IORegistryEntry::getRegistryRoot();
     if (root)
-        root->setProperty(category,
-                          result == kIOReturnSuccess ? "passed" : "refused: imported call");
+        root->setProperty(key, result == kIOReturnSuccess ? "passed" : "refused: imported call");
     return false;
 }
 
