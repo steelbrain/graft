@@ -5,7 +5,7 @@ Each release of Graft, newest first. A version is the kext's
 that lists `ai.aneesiqbal.graft` 0.1.0 in its `OSBundleLibraries` loads with
 each later release that keeps it.
 
-## Unreleased
+## 0.3.0
 
 **Upgrading**
 
