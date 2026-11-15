@@ -128,8 +128,9 @@ test: $(BUILD)/macho_test $(BUILD)/binding_test $(BUILD)/manifest_test $(BUILD)/
 	done
 
 # The fixup is architecture-dispatched (src/Fixup.h), so this test, which checks
-# the x86-64 pointer and branch arithmetic, forces x86-64 to pick that sibling.
-$(BUILD)/binding_test: tests/binding_test.cpp src/Binding.h src/Fixup.h src/x86_64/Fixup.h src/FixupShared.h src/Layout.h
+# the x86-64 pointer and branch arithmetic and branch islands, forces x86-64 to
+# pick that sibling.
+$(BUILD)/binding_test: tests/binding_test.cpp src/Binding.h src/Fixup.h src/x86_64/Fixup.h src/FixupShared.h src/Layout.h src/x86_64/IslandPool.h src/x86_64/X86Route.h
 	@mkdir -p $(BUILD)
 	$(HOSTCXX) -arch x86_64 -Isrc tests/binding_test.cpp -o $@
 
