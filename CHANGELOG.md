@@ -9,10 +9,24 @@ each later release that keeps it.
 
 **Upgrading**
 
-- No consumer or client needs a rebuild. The kexts do not change, and Graft
-  still declares `OSBundleCompatibleVersion` 0.1.0. A synthesized display that
-  overrides `set_block` builds with this release's SDK.
+- No consumer or client needs a rebuild, and no existing route or override
+  changes. Graft still declares `OSBundleCompatibleVersion` 0.1.0, and `Graft.h`
+  and the manifest format are unchanged. To route `policy_syscall`, a client
+  names it in a route symbol, such as `Sandbox:policy_syscall`; to override
+  `set_block`, a synthesized display declares it against this release's SDK.
 - The arm64 boot firmware hands over nothing new.
+
+**The kext**
+
+- On arm64e, a client can route a MAC policy's `policy_syscall` beside the three
+  admission operations. It is the policy's `mac_syscall(2)` entry, so a client
+  can answer or observe the queries a policy serves through it, such as a
+  rootless-trust query, and pass every other call to the policy. Unlike the
+  admission hooks, whose arguments are kernel objects, its argument is a
+  user-space address, so a replacement copies the argument in and the answer out
+  from the calling task. Graft routes it by the same ABI rule as the other
+  operations, deriving its slot and discriminator from `mpo_policy_syscall_t` in
+  the public `security/mac_policy.h`. x86-64 is unchanged.
 
 **The SDK**
 
