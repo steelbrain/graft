@@ -5,6 +5,25 @@ Each release of Graft, newest first. A version is the kext's
 that lists `ai.aneesiqbal.graft` 0.1.0 in its `OSBundleLibraries` loads with
 each later release that keeps it.
 
+## Unreleased
+
+**Upgrading**
+
+- No consumer or client needs a rebuild. The kexts do not change, and Graft
+  still declares `OSBundleCompatibleVersion` 0.1.0. A synthesized display that
+  overrides `set_block` builds with this release's SDK.
+- The arm64 boot firmware hands over nothing new.
+
+**The SDK**
+
+- The `IOMobileFramebufferLegacy` stand-in declares `set_block`, so a
+  synthesized display can override it. A display's user client passes it the
+  block calls its clients make, such as the ICC curves and colour matrices
+  WindowServer sets for a colour profile, Night Shift and True Tone. The live
+  class's own `set_block` answers them unsupported. Its symbol is the same on
+  macOS 13.6 to 27.2.1, and Graft places the override on its live slot as it
+  does each other method's.
+
 ## 0.3.1
 
 **Upgrading**
